@@ -6,3 +6,5 @@ frontend/dist/
 backend/*.log
 
 *.log
+
+# docs/ 是要提交给 GitHub Pages 的静态产物，不要忽略它

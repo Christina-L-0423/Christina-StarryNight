@@ -14,9 +14,9 @@
 
 ```
 StarryNight/
-├─ frontend/           React (Vite) 前端 —— 聊天界面（可独立静态部署）
-├─ backend/            Express 后端（本地占位接口，部署版不使用）
-├─ .github/workflows/  推送 main 后自动发布 GitHub Pages
+├─ frontend/   React (Vite) 前端 —— 聊天界面（可独立静态部署）
+├─ backend/    Express 后端 —— 占位接口（本地开发用，部署版不使用）
+├─ docs/       前端打包产物 —— GitHub Pages 从这里读取（自动生成，勿手改）
 └─ README.md
 ```
 
@@ -42,19 +42,38 @@ npm.cmd run dev
 
 > 前端内置了同款占位回复：即使后端没启动，聊天界面也能应答（会稍慢一点并走本地文案）。
 
-## 方式二 · 部署到 GitHub（手机随时打开）
+## 方式二 · 部署到 GitHub Pages（手机随时打开）
 
-页面 **不依赖后端也能用**（占位回复内置在前端），所以可以直接当静态站部署：
+本项目用 **Deploy from a branch** 方式部署：打包结果提交在仓库的 `docs/` 目录，GitHub 直接托管它，**不需要 Actions、不需要云端构建**。
 
-1. 把本项目推送到 GitHub 仓库（比如 `Christina-StarryNight`）。
-2. 打开仓库网页 → **Settings → Pages** → 「Source」选 **GitHub Actions**（保存）。
-3. 推送会自动触发 `.github/workflows/deploy-pages.yml` 构建发布；「Actions」标签里能看到进度，绿了就完成。
-4. 手机浏览器打开（把用户名换成你自己的）：
-   - 项目页：`https://<用户名>.github.io/<仓库名>/`
-   - 用户名页（如果你的仓库名叫 `<用户名>.github.io`）：`https://<用户名>.github.io/`
-5. 「添加到主屏幕」后可以全屏使用。
+页面 **不依赖后端也能用**（占位回复内置在前端），所以纯静态托管就能聊天。
 
-> 说明：GitHub Pages 只能托管静态文件，所以部署版没有 Express 后端——聊天回复是**内置占位文案**（阶段一本来就没接模型，所以体验一致）。等后续接入模型，「对话推理」会改由模型服务完成，届时部署方案再升级。
+### 第一次开启（手机上用浏览器也能做完）
+
+1. **本地打包**（在你电脑上，仓库根目录）：
+   ```bash
+   cd frontend
+   npm.cmd run build      # 产物自动输出到仓库根的 docs/
+   ```
+2. **提交并推送 `docs/`**：
+   ```bash
+   cd ..
+   git add -A
+   git commit -m "Build static site for GitHub Pages"
+   git push origin main
+   ```
+3. **网页上开启 Pages**：打开仓库 → **Settings** → 左侧 **Pages** →
+   - **Source** 选 **Deploy from a branch**
+   - **Branch** 选 `main`，文件夹选 **`/docs`** → **Save**
+4. 等约半分钟，页面顶部会出现你的正式地址：
+   **`https://Christina-L-0423.github.io/Christina-StarryNight/`**
+5. 手机浏览器打开它，或用「添加到主屏幕」当 App 全屏用。
+
+### 以后改了界面怎么更新
+
+改完代码后重复上面第 1～2 步（重新 build + push），Pages 会自动发布新版本。**`docs/` 必须跟着一起提交**，否则线上还是旧的。
+
+> 说明：GitHub Pages 只托管静态文件，所以部署版没有 Express 后端——聊天回复走**前端内置的占位文案**（阶段一本来就没接模型，体验一致）。等接入真实模型时，部署方案要相应升级（把推理交给模型服务或换成支持后端的托管平台）。
 
 ## 验收（这一阶段）
 
