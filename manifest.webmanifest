@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "Internal Beyond",
-  "short_name": "IB",
+  "name": "StarryNight",
+  "short_name": "SN",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
