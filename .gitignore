@@ -1,0 +1,8 @@
+# 本地测试 / 运行垃圾，不进版本控制
+server.log
+server.err
+
+# 通用
+node_modules/
+Thumbs.db
+.DS_Store
