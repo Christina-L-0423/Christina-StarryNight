@@ -694,6 +694,13 @@ window.SN = window.SN || {};
         status.value = "已恢复出厂设置。";
       }
 
+      /* ---- 设置内部分页："" = 主列表；"api" | "weather" | "data" | "about" ---- */
+      const subPage = ref("");
+
+      function openSub(name) {
+        subPage.value = name;
+      }
+
       return {
         settings: settings,
         weather: weather,
@@ -711,12 +718,56 @@ window.SN = window.SN || {};
         pickFile: pickFile,
         onFile: onFile,
         askReset: askReset,
+        subPage: subPage,
+        openSub: openSub,
         version: SN.VERSION
       };
     },
     template: `
-      <p class="section-title">AI 接口</p>
-      <p class="field__hint">点一个服务商自动填好地址和模型（推荐 DeepSeek，便宜好用）：</p>
+      <!-- 主列表：iOS 设置风格的分组导航，第一项是 AI 接口 -->
+      <div v-if="!subPage">
+        <p class="section-title">设置</p>
+        <div class="list">
+          <button class="row" type="button" @click="openSub('api')">
+            <span class="row__main">
+              <span class="row__label">AI 接口</span>
+              <span class="row__sub">服务商、密钥、模型与测试连接</span>
+            </span>
+            <sn-glyph class="row__chev" name="chevron-right" :size="18"></sn-glyph>
+          </button>
+          <button class="row" type="button" @click="openSub('weather')">
+            <span class="row__main">
+              <span class="row__label">天气与位置</span>
+              <span class="row__sub">显示的城市名与经纬度</span>
+            </span>
+            <sn-glyph class="row__chev" name="chevron-right" :size="18"></sn-glyph>
+          </button>
+          <button class="row" type="button" @click="openSub('data')">
+            <span class="row__main">
+              <span class="row__label">数据管理</span>
+              <span class="row__sub">备份导出 / 导入 / 恢复出厂</span>
+            </span>
+            <sn-glyph class="row__chev" name="chevron-right" :size="18"></sn-glyph>
+          </button>
+          <button class="row" type="button" @click="openSub('about')">
+            <span class="row__main">
+              <span class="row__label">关于</span>
+              <span class="row__sub">版本与数据说明</span>
+            </span>
+            <sn-glyph class="row__chev" name="chevron-right" :size="18"></sn-glyph>
+          </button>
+        </div>
+      </div>
+
+      <!-- 子页：AI 接口 -->
+      <div v-else-if="subPage === 'api'">
+        <div class="app-header__bar">
+          <button class="back-btn" type="button" @click="subPage = ''">
+            <sn-glyph name="chevron-left" :size="18"></sn-glyph><span>设置</span>
+          </button>
+          <span class="row__value">AI 接口</span>
+        </div>
+        <p class="field__hint">点一个服务商自动填好地址和模型（推荐 DeepSeek，便宜好用）：</p>
       <div class="chips">
         <button class="chip" type="button" v-for="p in presets" :key="p.id" @click="applyPreset(p)">{{ p.name }}</button>
       </div>
@@ -770,7 +821,16 @@ window.SN = window.SN || {};
         密钥只保存在你自己的浏览器里；聊天请求从你的设备直达服务商。导出备份会包含密钥，请保管好备份文件。
       </p>
 
-      <p class="section-title">天气与位置</p>
+      </div>
+
+      <!-- 子页：天气与位置 -->
+      <div v-else-if="subPage === 'weather'">
+        <div class="app-header__bar">
+          <button class="back-btn" type="button" @click="subPage = ''">
+            <sn-glyph name="chevron-left" :size="18"></sn-glyph><span>设置</span>
+          </button>
+          <span class="row__value">天气与位置</span>
+        </div>
       <label class="field">
         <span class="field__label">位置名称（只用于显示）</span>
         <input class="input" v-model="settings.locationName" type="text" placeholder="例如 锦江区" />
@@ -800,8 +860,16 @@ window.SN = window.SN || {};
       <p class="field__hint">
         当前：{{ weather.temp }}° {{ weather.text }} · {{ weather.live ? '实时数据' : '示例数据' }}
       </p>
+      </div>
 
-      <p class="section-title">数据管理</p>
+      <!-- 子页：数据管理 -->
+      <div v-else-if="subPage === 'data'">
+        <div class="app-header__bar">
+          <button class="back-btn" type="button" @click="subPage = ''">
+            <sn-glyph name="chevron-left" :size="18"></sn-glyph><span>设置</span>
+          </button>
+          <span class="row__value">数据管理</span>
+        </div>
       <div class="list">
         <button class="row" type="button" @click="exportData">
           <span class="row__main">
@@ -827,8 +895,16 @@ window.SN = window.SN || {};
       </div>
       <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="onFile" />
       <p class="field__hint" v-if="status">{{ status }}</p>
+      </div>
 
-      <p class="section-title">关于</p>
+      <!-- 子页：关于 -->
+      <div v-else-if="subPage === 'about'">
+        <div class="app-header__bar">
+          <button class="back-btn" type="button" @click="subPage = ''">
+            <sn-glyph name="chevron-left" :size="18"></sn-glyph><span>设置</span>
+          </button>
+          <span class="row__value">关于</span>
+        </div>
       <div class="list">
         <div class="row">
           <span class="row__main"><span class="row__label">版本</span></span>
@@ -842,6 +918,7 @@ window.SN = window.SN || {};
           <span class="row__main"><span class="row__label">天气数据来源</span></span>
           <span class="row__value">Open-Meteo</span>
         </div>
+      </div>
       </div>
     `
   };
