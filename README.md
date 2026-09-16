@@ -28,6 +28,25 @@ python -m http.server 8080
 ### 方式 3：VS Code 插件
 装一个 **Live Server** 插件，右键 `index.html` → `Open with Live Server`。
 
+### 方式 3：在线网页（GitHub Pages，任何设备直接打开）
+> 🌐 **https://christina-l-0423.github.io/Christina-StarryNight/**
+
+第一次需要先在 GitHub 网页上开启（只需一次，以后每次 push 自动更新）：
+
+1. 打开仓库页面 → 点 **Settings**（顶部标签，齿轮图标）
+2. 左侧栏找到 **Pages**
+3. **Build and deployment → Source** 下拉框选 **Deploy from a branch**
+   （如果显示的是 GitHub Actions，就改成它）
+4. 下面的 **Branch** 选 `main`，目录保持 `/ (root)`，点 **Save**
+5. 等 1~3 分钟，刷新 Pages 页面，顶部出现绿条
+   `Your site is live at https://christina-l-0423.github.io/Christina-StarryNight/` 就成功了
+
+> 手机浏览器打开上面网址即可全屏使用；也可以「添加到主屏幕」当 App 用。
+> 注意：在线版的数据存在**那台设备的浏览器**里，和本地电脑互不相通。
+
+### 方式 4：VS Code 插件（备选）
+装一个 **Live Server** 插件，右键 `index.html` → `Open with Live Server`。
+
 ---
 
 ## 二、文件结构（每个文件是干什么的）
