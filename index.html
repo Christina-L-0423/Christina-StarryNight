@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#05070f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>StarryNight · AI 小手机</title>
+
+  <link rel="stylesheet" href="./assets/css/base.css" />
+  <link rel="stylesheet" href="./assets/css/phone.css" />
+  <link rel="stylesheet" href="./assets/css/apps.css" />
+</head>
+
+<body>
+  <div id="boot" class="boot">正在启动小手机…</div>
+
+  <!--
+    ============================================================
+    这就是整台小手机的“结构图”。
+    在 #app 里面写的内容 = Vue 的模板（会被自动接管渲染）。
+    注意：在 HTML 里写自定义组件，必须用 <标签></标签> 这种成对写法。
+    ============================================================
+  -->
+  <div id="app">
+    <div class="stage">
+      <!-- .phone 就是手机本体（电脑上显示成手机外壳，手机上是全屏） -->
+      <div class="phone" :class="schemeClass">
+
+        <!-- 壁纸：纯 CSS 渐变 + 星点，不依赖任何图片 -->
+        <div class="wallpaper" :style="{ backgroundImage: wallpaper.css }">
+          <div class="wallpaper__stars" v-if="wallpaper.stars"></div>
+          <div class="wallpaper__glow"></div>
+        </div>
+
+        <!-- 灵动岛（装饰） -->
+        <div class="dynamic-island"></div>
+
+        <!-- 顶部状态栏：时间 / 信号 / WiFi / 电量 -->
+        <sn-status-bar></sn-status-bar>
+
+        <!-- 桌面层：时间天气小组件 + 应用图标 + 底部 Dock -->
+        <div class="home-layer" :class="{ 'is-pushed': !!state.activeApp }">
+          <sn-home></sn-home>
+          <sn-dock></sn-dock>
+        </div>
+
+        <!-- 打开的应用会以全屏面板的形式滑上来 -->
+        <transition name="screen">
+          <sn-app-screen
+            v-if="state.activeApp"
+            :app-id="state.activeApp"
+            @close="closeApp"
+          ></sn-app-screen>
+        </transition>
+
+        <!-- 底部小白条 -->
+        <div class="home-indicator"></div>
+      </div>
+
+      <p class="stage__tip">
+        电脑端以手机外壳预览 · 用手机浏览器打开即为全屏 · 长按/点击图标进入应用
+      </p>
+    </div>
+  </div>
+
+  <!-- Vue 3（完整版，自带模板编译，所以不需要打包工具） -->
+  <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
+
+  <!-- 下面这些顺序不能随意调换：先配置 → 再状态 → 再组件 → 最后启动 -->
+  <script src="./assets/js/config.js"></script>
+  <script src="./assets/js/store.js"></script>
+  <script src="./assets/js/weather.js"></script>
+  <script src="./assets/js/components.js"></script>
+  <script src="./assets/js/views.js"></script>
+  <script src="./assets/js/app.js"></script>
+</body>
+</html>

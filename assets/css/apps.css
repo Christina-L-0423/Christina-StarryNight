@@ -1,0 +1,589 @@
+/* ============================================================
+   apps.css —— 应用面板内部的通用样式
+   （标题栏、卡片、列表、聊天气泡、输入框、开关、按钮…）
+   ============================================================ */
+
+/* ---------- 应用全屏面板 ---------- */
+.app-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  background: var(--screen-bg);
+  backdrop-filter: blur(34px) saturate(180%);
+  -webkit-backdrop-filter: blur(34px) saturate(180%);
+  border-radius: inherit;
+  overflow: hidden;
+}
+
+.theme-light .app-screen {
+  --screen-bg: rgba(248, 249, 253, 0.72);
+}
+
+.phone:not(.theme-light) .app-screen {
+  --screen-bg: rgba(16, 18, 30, 0.66);
+}
+
+/* ---------- 标题栏 ---------- */
+.app-header {
+  padding: 62px 20px 10px;
+  flex: none;
+}
+
+.app-header__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32px;
+}
+
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 32px;
+  padding: 0 12px 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent);
+  border-radius: 999px;
+  background: var(--card-bg);
+  transition: background 0.2s ease;
+}
+
+.back-btn:active {
+  background: var(--card-bg-hover);
+}
+
+.app-header__title {
+  margin-top: 10px;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+}
+
+.app-header__sub {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+/* ---------- 内容区 ---------- */
+.app-body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 6px 18px 48px;
+}
+
+.section-title {
+  margin: 22px 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  color: var(--text-3);
+}
+
+.section-title:first-child {
+  margin-top: 8px;
+}
+
+/* ---------- 卡片 / 分组列表 ---------- */
+.card {
+  padding: 16px;
+  border-radius: var(--r-lg);
+  background: var(--card-bg);
+  border: 0.5px solid var(--hairline);
+}
+
+.list {
+  border-radius: var(--r-lg);
+  background: var(--card-bg);
+  border: 0.5px solid var(--hairline);
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 15px;
+  text-align: left;
+  transition: background 0.2s ease;
+}
+
+.row + .row {
+  border-top: 0.5px solid var(--hairline);
+}
+
+.row:active {
+  background: var(--card-bg-hover);
+}
+
+.row__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.row__label {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.row__sub {
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.row__value {
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.row__chev {
+  color: var(--text-3);
+}
+
+/* 头像：用渐变色块 + 首字，不需要任何图片 */
+.avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  font-size: 18px;
+  font-weight: 600;
+  color: #fff;
+  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.45);
+}
+
+.avatar--lg {
+  width: 72px;
+  height: 72px;
+  font-size: 28px;
+}
+
+.badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ---------- 输入框 ---------- */
+.field {
+  display: block;
+  margin-bottom: 14px;
+}
+
+.field__label {
+  display: block;
+  margin: 0 0 6px 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.field__hint {
+  margin: 6px 4px 0;
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+.input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--r-sm);
+  background: var(--input-bg);
+  border: 0.5px solid var(--hairline);
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.input:focus {
+  border-color: var(--accent);
+}
+
+/* ---------- 开关 ---------- */
+.switch {
+  position: relative;
+  flex: none;
+  width: 51px;
+  height: 31px;
+  border-radius: 16px;
+  background: rgba(120, 120, 128, 0.34);
+  transition: background 0.25s ease;
+}
+
+.switch.is-on {
+  background: var(--green);
+}
+
+.switch__dot {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28);
+  transition: transform 0.25s var(--ease);
+}
+
+.switch.is-on .switch__dot {
+  transform: translateX(20px);
+}
+
+/* ---------- 按钮 ---------- */
+.btn {
+  display: block;
+  width: 100%;
+  padding: 13px 16px;
+  border-radius: var(--r-md);
+  background: var(--card-bg);
+  border: 0.5px solid var(--hairline);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+  transition: transform 0.15s var(--ease), background 0.2s ease;
+}
+
+.btn:active {
+  transform: scale(0.98);
+  background: var(--card-bg-hover);
+}
+
+.btn--primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+
+.btn--danger {
+  color: var(--danger);
+}
+
+.btn-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* ---------- 分类胶囊 ---------- */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 2px 4px 6px;
+}
+
+.chip {
+  padding: 6px 13px;
+  border-radius: 999px;
+  background: var(--card-bg);
+  border: 0.5px solid var(--hairline);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+  transition: all 0.2s ease;
+}
+
+.chip.is-active {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+
+/* ---------- 聊天气泡 ---------- */
+.bubble-row {
+  display: flex;
+  margin-bottom: 10px;
+}
+
+.bubble-row--me {
+  justify-content: flex-end;
+}
+
+.bubble {
+  max-width: 78%;
+  padding: 10px 14px;
+  border-radius: 20px;
+  font-size: 15px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.bubble--them {
+  background: var(--card-bg);
+  border: 0.5px solid var(--hairline);
+  border-bottom-left-radius: 6px;
+}
+
+.bubble--me {
+  background: var(--accent);
+  color: #fff;
+  border-bottom-right-radius: 6px;
+}
+
+.bubble-time {
+  margin: 2px 4px 12px;
+  font-size: 11px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+/* ---------- 聊天输入条 ---------- */
+.composer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 10px 0 14px;
+  background: linear-gradient(to top, var(--screen-bg) 55%, transparent);
+}
+
+.composer .input {
+  border-radius: 999px;
+  padding: 11px 16px;
+}
+
+.send-btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  transition: transform 0.15s var(--ease), opacity 0.2s ease;
+}
+
+.send-btn:active {
+  transform: scale(0.92);
+}
+
+.send-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ---------- 壁纸选择 ---------- */
+.wallpaper-pick {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.wallpaper-pick__item {
+  position: relative;
+  aspect-ratio: 9 / 16;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  border: 2px solid transparent;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.25);
+  transition: transform 0.18s var(--ease), border-color 0.2s ease;
+}
+
+.wallpaper-pick__item:active {
+  transform: scale(0.95);
+}
+
+.wallpaper-pick__item.is-active {
+  border-color: var(--accent);
+}
+
+.wallpaper-pick__name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 16px 8px 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #fff;
+  text-align: center;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.5), transparent);
+}
+
+/* ---------- 网格卡片（角色集等） ---------- */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.tile {
+  padding: 14px;
+  border-radius: var(--r-lg);
+  background: var(--card-bg);
+  border: 0.5px solid var(--hairline);
+  text-align: center;
+}
+
+.tile__name {
+  margin-top: 9px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tile__desc {
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+
+/* ============================================================
+   以下是为了让页面更好看而补充的样式（按需扩展）
+   ============================================================ */
+
+/* 让 chip 里也能放小图标 */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* 滑块（亮度、temperature 等） */
+.range {
+  flex: none;
+  width: 118px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  background: none;
+  -webkit-appearance: none;
+  appearance: none;
+  border: 0;
+}
+
+.range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(120, 120, 128, 0.4);
+}
+
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: -8px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.range::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(120, 120, 128, 0.4);
+}
+
+.range::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+}
+
+/* 世界书正文允许换行 */
+.row__sub--wrap {
+  white-space: normal;
+  line-height: 1.5;
+}
+
+/* 并排的两个输入框 */
+.field-row {
+  display: flex;
+  gap: 10px;
+}
+
+.field-row .field {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 论坛帖子卡片 */
+.post {
+  margin-bottom: 12px;
+}
+
+.post__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.post__avatar {
+  width: 38px;
+  height: 38px;
+  font-size: 15px;
+  background-image: linear-gradient(150deg, #8ea2ff, #c86bff);
+}
+
+.post__title {
+  margin-top: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.post__excerpt {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+
+.post__actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+}
+
+/* 个人主页卡片 */
+.profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 22px 16px;
+  text-align: center;
+}
+
+.profile__name {
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.profile__sign {
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+/* 禁用的按钮 */
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
