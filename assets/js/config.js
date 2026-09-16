@@ -106,6 +106,17 @@ window.SN = window.SN || {};
       '<path d="M20 3.6v3.5h-3.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>',
     send:
       '<path d="M3.4 11.3 20.2 4.1c.7-.3 1.4.4 1.1 1.1l-7.1 16.8c-.3.7-1.4.7-1.6-.1l-1.5-6.1-6.1-1.5c-.8-.2-.8-1.3 0-1.6Z" fill="currentColor"/>',
+    /* 线条镂空版发送键：一个纸飞机 */
+    "send-line":
+      '<path d="M20.8 4.2 3.1 10.6c-.7.3-.7 1.3 0 1.6l5.5 2 2 5.5c.3.7 1.3.7 1.6 0L20.8 4.2Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>' +
+      '<path d="M20.8 4.2 8.6 13.9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
+    /* 线条镂空版回复键：一个折回来的箭头 */
+    "reply-line":
+      '<path d="M9.4 5.4 3.6 11.2l5.8 5.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<path d="M3.6 11.2h8.7a6.5 6.5 0 0 1 6.5 6.5v.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
+    /* 线条镂空版停止键 */
+    "stop-line":
+      '<rect x="6.6" y="6.6" width="10.8" height="10.8" rx="2.6" fill="none" stroke="currentColor" stroke-width="1.8"/>',
     pin:
       '<path d="M12 22s7-6.2 7-11.4A7 7 0 0 0 5 10.6C5 15.8 12 22 12 22Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>' +
       '<circle cx="12" cy="10.5" r="2.4" fill="currentColor"/>',

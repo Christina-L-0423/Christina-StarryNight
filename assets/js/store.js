@@ -212,9 +212,12 @@ window.SN = window.SN || {};
     return clock.value.hm;
   }
 
-  function pushMessage(characterId, role, text) {
+  /* quote 可选：引用回复时带上的那段小引用文字 */
+  function pushMessage(characterId, role, text, quote) {
     if (!state.chats[characterId]) state.chats[characterId] = [];
-    state.chats[characterId].push({ role: role, text: text, time: timeStamp() });
+    const message = { role: role, text: text, time: timeStamp() };
+    if (quote) message.quote = quote;
+    state.chats[characterId].push(message);
   }
 
   function clearChat(characterId) {

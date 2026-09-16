@@ -66,14 +66,17 @@ window.SN = window.SN || {};
       }
 
       const errorText = ref("");
+      const replyTo = ref(null); /* 正在引用的那条消息（点「回复」后出现） */
+      const showMenu = ref(false); /* 底栏「更多」弹出的操作面板 */
 
-      function send() {
-        const text = draft.value.trim();
-        if (!text || !activeId.value || sending.value) return;
+      /* 把一句话裁短，用作引用条里显示的小字 */
+      function snippet(text) {
+        const clean = String(text || "").replace(/\s+/g, " ").trim();
+        return clean.length > 24 ? clean.slice(0, 24) + "…" : clean;
+      }
 
-        const targetId = activeId.value;
-        store.pushMessage(targetId, "me", text);
-        draft.value = "";
+      /* 真正发请求：发送和「重新生成」都走这里 */
+      function requestReply(targetId) {
         errorText.value = "";
         sending.value = true;
         scrollToBottom();
@@ -128,9 +131,78 @@ window.SN = window.SN || {};
           });
       }
 
+      function send() {
+        const text = draft.value.trim();
+        if (!text || !activeId.value || sending.value) return;
+
+        /* 如果正在引用某条消息，就把它一起带上 */
+        const quote = replyTo.value ? replyTo.value.text : "";
+        store.pushMessage(activeId.value, "me", text, quote);
+        draft.value = "";
+        replyTo.value = null;
+        requestReply(activeId.value);
+      }
+
       /* 生成过程中可以点停止 */
       function stopReply() {
         SN.api.cancel();
+      }
+
+      /* ---- 引用回复：引用最后一条消息 ---- */
+      const canReply = computed(function () {
+        return messages.value.length > 0;
+      });
+
+      function startReply() {
+        const list = messages.value;
+        const last = list[list.length - 1];
+        if (!last) return;
+        replyTo.value = { text: snippet(last.text) };
+      }
+
+      function cancelReply() {
+        replyTo.value = null;
+      }
+
+      /* ---- 底栏左边的「更多」：重新生成 / 清空对话 ---- */
+      const canRegenerate = computed(function () {
+        return (
+          !sending.value &&
+          messages.value.some(function (m) {
+            return m.role === "them";
+          })
+        );
+      });
+
+      function regenerate() {
+        showMenu.value = false;
+        const targetId = activeId.value;
+        if (!targetId || sending.value) return;
+        /* 先删掉最后一条对方消息，再按同样的上下文重新问一次 */
+        const list = store.state.chats[targetId] || [];
+        for (let i = list.length - 1; i >= 0; i -= 1) {
+          if (list[i].role === "them") {
+            list.splice(i, 1);
+            break;
+          }
+        }
+        requestReply(targetId);
+      }
+
+      function clearChat() {
+        showMenu.value = false;
+        const targetId = activeId.value;
+        if (!targetId) return;
+        const name = activeCharacter.value ? activeCharacter.value.name : "对方";
+        SN.ui
+          .confirm({
+            message: "确定清空和「" + name + "」的全部聊天记录吗？清空后无法找回。",
+            confirmText: "清空",
+            danger: true
+          })
+          .then(function (ok) {
+            if (ok) store.clearChat(targetId);
+          });
       }
 
       return {
@@ -140,6 +212,14 @@ window.SN = window.SN || {};
         draft: draft,
         sending: sending,
         errorText: errorText,
+        replyTo: replyTo,
+        showMenu: showMenu,
+        canReply: canReply,
+        canRegenerate: canRegenerate,
+        startReply: startReply,
+        cancelReply: cancelReply,
+        regenerate: regenerate,
+        clearChat: clearChat,
         lastText: lastText,
         openChat: openChat,
         backToList: backToList,
@@ -171,27 +251,64 @@ window.SN = window.SN || {};
         </div>
       </div>
 
-      <div v-else>
-        <div class="bubble-time">{{ activeCharacter.tagline }}</div>
+      <div class="chat" v-else>
+        <div class="chat__list">
+          <div class="bubble-time">{{ activeCharacter.tagline }}</div>
 
-        <div class="bubble-row" v-for="(m, i) in messages" :key="i" :class="{ 'bubble-row--me': m.role === 'me' }">
-          <div class="bubble" :class="m.role === 'me' ? 'bubble--me' : 'bubble--them'">
-            <template v-if="m.text">{{ m.text }}</template>
-            <span v-else class="typing" aria-label="对方正在输入"><i></i><i></i><i></i></span>
+          <div class="bubble-row" v-for="(m, i) in messages" :key="i" :class="{ 'bubble-row--me': m.role === 'me' }">
+            <div class="bubble" :class="m.role === 'me' ? 'bubble--me' : 'bubble--them'">
+              <span class="bubble__quote" v-if="m.quote">{{ m.quote }}</span>
+              <template v-if="m.text">{{ m.text }}</template>
+              <span v-else class="typing" aria-label="对方正在输入"><i></i><i></i><i></i></span>
+            </div>
           </div>
+
+          <div class="empty" v-if="!messages.length">还没有消息，说点什么吧。</div>
+
+          <div class="api-error" v-if="errorText">{{ errorText }}</div>
         </div>
 
-        <div class="empty" v-if="!messages.length">还没有消息，说点什么吧。</div>
-
-        <div class="api-error" v-if="errorText">{{ errorText }}</div>
-
         <form class="composer" @submit.prevent="send">
-          <input class="input" v-model="draft" type="text" placeholder="说点什么…" />
-          <button v-if="sending" class="send-btn send-btn--stop" type="button" title="停止生成" @click="stopReply">■</button>
-          <button v-else class="send-btn" type="submit" :disabled="!draft.trim()">
-            <sn-glyph name="send" :size="18"></sn-glyph>
-          </button>
+          <div class="composer__reply" v-if="replyTo">
+            <sn-glyph name="reply-line" :size="13"></sn-glyph>
+            <span class="composer__reply-text">{{ replyTo.text }}</span>
+            <button class="composer__reply-x" type="button" aria-label="取消引用" @click="cancelReply">×</button>
+          </div>
+
+          <div class="composer__bar">
+            <button class="composer__btn" type="button" title="更多" aria-label="更多" @click="showMenu = true">
+              <sn-glyph name="plus" :size="16"></sn-glyph>
+            </button>
+            <input class="input" v-model="draft" type="text" placeholder="说点什么…" />
+            <button class="composer__btn" type="button" title="回复最后一条消息" aria-label="回复"
+              :disabled="!canReply" @click="startReply">
+              <sn-glyph name="reply-line" :size="16"></sn-glyph>
+            </button>
+            <button v-if="sending" class="composer__btn composer__btn--stop" type="button" title="停止生成"
+              aria-label="停止生成" @click="stopReply">
+              <sn-glyph name="stop-line" :size="16"></sn-glyph>
+            </button>
+            <button v-else class="composer__btn composer__btn--send" type="submit" title="发送" aria-label="发送"
+              :disabled="!draft.trim()">
+              <sn-glyph name="send-line" :size="18"></sn-glyph>
+            </button>
+          </div>
         </form>
+
+        <div class="modal-mask" v-if="showMenu" @click.self="showMenu = false">
+          <div class="modal">
+            <div class="modal__head">
+              <span class="modal__title">更多操作</span>
+              <button class="modal__close" type="button" @click="showMenu = false">×</button>
+            </div>
+            <div class="modal__body">
+              <button class="modal__item" type="button" :disabled="!canRegenerate" @click="regenerate">
+                重新生成回复
+              </button>
+              <button class="modal__item" type="button" @click="clearChat">清空这段对话</button>
+            </div>
+          </div>
+        </div>
       </div>
     `
   };

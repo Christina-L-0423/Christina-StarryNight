@@ -339,21 +339,6 @@
   font-size: 10.5px;
 }
 
-/* ---------- 底部小白条 ---------- */
-.home-indicator {
-  position: absolute;
-  bottom: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 138px;
-  height: 5px;
-  border-radius: 3px;
-  background: var(--text-1);
-  opacity: 0.55;
-  z-index: 50;
-  pointer-events: none;
-}
-
 /* ---------- 应用面板的出场动画 ---------- */
 .screen-enter-active,
 .screen-leave-active {
