@@ -103,9 +103,7 @@ window.SN = window.SN || {};
     const history = (state.chats[characterId] || [])
       .slice(-keep)
       .map(function (m) {
-        /* 引用回复：把你引用的那句话也告诉 AI，它才知道你在回应什么 */
-        const content = m.quote ? "（回应这条消息：「" + m.quote + "」）" + m.text : m.text;
-        return { role: m.role === "me" ? "user" : "assistant", content: content };
+        return { role: m.role === "me" ? "user" : "assistant", content: m.text };
       })
       .filter(function (m) {
         return m.content;

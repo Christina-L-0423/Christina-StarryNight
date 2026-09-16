@@ -66,16 +66,24 @@ window.SN = window.SN || {};
       }
 
       const errorText = ref("");
-      const replyTo = ref(null); /* 正在引用的那条消息（点「回复」后出现） */
       const showMenu = ref(false); /* 底栏「更多」弹出的操作面板 */
 
-      /* 把一句话裁短，用作引用条里显示的小字 */
-      function snippet(text) {
-        const clean = String(text || "").replace(/\s+/g, " ").trim();
-        return clean.length > 24 ? clean.slice(0, 24) + "…" : clean;
-      }
+      /*
+        还没被 AI 回复的消息条数：
+        从最后一条往上数，连续有几条「我」发的消息就返回几。
+        这个数字会显示在回复键的小角标上。
+      */
+      const pendingCount = computed(function () {
+        let count = 0;
+        const list = messages.value;
+        for (let i = list.length - 1; i >= 0; i -= 1) {
+          if (list[i].role === "me") count += 1;
+          else break;
+        }
+        return count;
+      });
 
-      /* 真正发请求：发送和「重新生成」都走这里 */
+      /* 真正发请求：回复键和「重新生成」都走这里 */
       function requestReply(targetId) {
         errorText.value = "";
         sending.value = true;
@@ -131,16 +139,16 @@ window.SN = window.SN || {};
           });
       }
 
+      /*
+        发送键：只把输入框里的文字放进聊天框，AI 暂时不回复。
+        （想让它回的时候再点右边的回复键，一次性回复你刚发的这几条）
+      */
       function send() {
         const text = draft.value.trim();
-        if (!text || !activeId.value || sending.value) return;
-
-        /* 如果正在引用某条消息，就把它一起带上 */
-        const quote = replyTo.value ? replyTo.value.text : "";
-        store.pushMessage(activeId.value, "me", text, quote);
+        if (!text || !activeId.value) return;
+        store.pushMessage(activeId.value, "me", text);
         draft.value = "";
-        replyTo.value = null;
-        requestReply(activeId.value);
+        scrollToBottom();
       }
 
       /* 生成过程中可以点停止 */
@@ -148,20 +156,18 @@ window.SN = window.SN || {};
         SN.api.cancel();
       }
 
-      /* ---- 引用回复：引用最后一条消息 ---- */
+      /*
+        回复键：让 AI 一次性回复「我」刚刚连续发出的那几条消息。
+        没有待回复的消息、或正在生成时，按钮是灰的（点不动）。
+      */
       const canReply = computed(function () {
-        return messages.value.length > 0;
+        return !sending.value && pendingCount.value > 0;
       });
 
-      function startReply() {
-        const list = messages.value;
-        const last = list[list.length - 1];
-        if (!last) return;
-        replyTo.value = { text: snippet(last.text) };
-      }
-
-      function cancelReply() {
-        replyTo.value = null;
+      function reply() {
+        const targetId = activeId.value;
+        if (!targetId || !canReply.value) return;
+        requestReply(targetId);
       }
 
       /* ---- 底栏左边的「更多」：重新生成 / 清空对话 ---- */
@@ -212,12 +218,11 @@ window.SN = window.SN || {};
         draft: draft,
         sending: sending,
         errorText: errorText,
-        replyTo: replyTo,
         showMenu: showMenu,
+        pendingCount: pendingCount,
         canReply: canReply,
+        reply: reply,
         canRegenerate: canRegenerate,
-        startReply: startReply,
-        cancelReply: cancelReply,
         regenerate: regenerate,
         clearChat: clearChat,
         lastText: lastText,
@@ -257,7 +262,6 @@ window.SN = window.SN || {};
 
           <div class="bubble-row" v-for="(m, i) in messages" :key="i" :class="{ 'bubble-row--me': m.role === 'me' }">
             <div class="bubble" :class="m.role === 'me' ? 'bubble--me' : 'bubble--them'">
-              <span class="bubble__quote" v-if="m.quote">{{ m.quote }}</span>
               <template v-if="m.text">{{ m.text }}</template>
               <span v-else class="typing" aria-label="对方正在输入"><i></i><i></i><i></i></span>
             </div>
@@ -269,27 +273,22 @@ window.SN = window.SN || {};
         </div>
 
         <form class="composer" @submit.prevent="send">
-          <div class="composer__reply" v-if="replyTo">
-            <sn-glyph name="reply-line" :size="13"></sn-glyph>
-            <span class="composer__reply-text">{{ replyTo.text }}</span>
-            <button class="composer__reply-x" type="button" aria-label="取消引用" @click="cancelReply">×</button>
-          </div>
-
           <div class="composer__bar">
             <button class="composer__btn" type="button" title="更多" aria-label="更多" @click="showMenu = true">
               <sn-glyph name="plus" :size="16"></sn-glyph>
             </button>
             <input class="input" v-model="draft" type="text" placeholder="说点什么…" />
-            <button class="composer__btn" type="button" title="回复最后一条消息" aria-label="回复"
-              :disabled="!canReply" @click="startReply">
+            <button class="composer__btn" type="button" title="让 AI 回复我发的这几条" aria-label="回复"
+              :disabled="!canReply" @click="reply">
               <sn-glyph name="reply-line" :size="16"></sn-glyph>
+              <span class="composer__badge" v-if="pendingCount">{{ pendingCount > 9 ? "9+" : pendingCount }}</span>
             </button>
             <button v-if="sending" class="composer__btn composer__btn--stop" type="button" title="停止生成"
               aria-label="停止生成" @click="stopReply">
               <sn-glyph name="stop-line" :size="16"></sn-glyph>
             </button>
-            <button v-else class="composer__btn composer__btn--send" type="submit" title="发送" aria-label="发送"
-              :disabled="!draft.trim()">
+            <button v-else class="composer__btn composer__btn--send" type="submit" title="发送到聊天框"
+              aria-label="发送" :disabled="!draft.trim()">
               <sn-glyph name="send-line" :size="18"></sn-glyph>
             </button>
           </div>
