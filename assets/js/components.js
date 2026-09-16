@@ -219,27 +219,55 @@ window.SN = window.SN || {};
       appId: { type: String, required: true }
     },
     emits: ["close"],
+    /* viewRef 指向当前页面组件；页面通过 navTitle / navIsSub / navBack / navBackLabel
+       上报自己的导航状态，头部据此显示正确的标题和返回行为。 */
+    setup: function () {
+      return { viewRef: Vue.ref(null) };
+    },
     computed: {
       meta: function () {
         return SN.findApp(this.appId) || { id: this.appId, name: "应用", intro: "" };
       },
       viewName: function () {
         return SN.views[this.appId] || "";
+      },
+      navIsSub: function () {
+        const v = this.viewRef;
+        return Boolean(v && v.navIsSub);
+      },
+      title: function () {
+        const v = this.viewRef;
+        return (v && v.navTitle) || this.meta.name;
+      },
+      backLabel: function () {
+        if (!this.navIsSub) return "桌面";
+        const v = this.viewRef;
+        return (v && v.navBackLabel) || "返回";
+      }
+    },
+    methods: {
+      onBack: function () {
+        const v = this.viewRef;
+        if (this.navIsSub && v && typeof v.navBack === "function") {
+          v.navBack(); /* 子页：返回应用内的上一层 */
+        } else {
+          this.$emit("close"); /* 主页：返回桌面 */
+        }
       }
     },
     template:
       '<section class="app-screen">' +
       '<header class="app-header">' +
       '<div class="app-header__bar">' +
-      '<button class="back-btn" type="button" @click="$emit(\'close\')">' +
-      '<sn-glyph name="chevron-left" :size="18"></sn-glyph><span>桌面</span>' +
+      '<button class="back-btn" type="button" @click="onBack">' +
+      '<sn-glyph name="chevron-left" :size="18"></sn-glyph><span>{{ backLabel }}</span>' +
       "</button>" +
       "</div>" +
-      '<h1 class="app-header__title">{{ meta.name }}</h1>' +
-      '<p class="app-header__sub">{{ meta.intro }}</p>' +
+      '<h1 class="app-header__title">{{ title }}</h1>' +
+      '<p class="app-header__sub" v-if="!navIsSub">{{ meta.intro }}</p>' +
       "</header>" +
       '<div class="app-body">' +
-      '<component :is="viewName" :app="meta"></component>' +
+      '<component :is="viewName" :app="meta" ref="viewRef"></component>' +
       "</div>" +
       "</section>"
   };

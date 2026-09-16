@@ -144,7 +144,16 @@ window.SN = window.SN || {};
         openChat: openChat,
         backToList: backToList,
         send: send,
-        stopReply: stopReply
+        stopReply: stopReply,
+        /* 头部导航上报：会话详情时标题显示角色名，返回键回会话列表 */
+        navTitle: computed(function () {
+          return activeCharacter.value ? activeCharacter.value.name : "";
+        }),
+        navIsSub: computed(function () {
+          return Boolean(activeCharacter.value);
+        }),
+        navBack: backToList,
+        navBackLabel: "会话"
       };
     },
     template: `
@@ -167,13 +176,6 @@ window.SN = window.SN || {};
       </div>
 
       <div v-else>
-        <div class="app-header__bar">
-          <button class="back-btn" type="button" @click="backToList">
-            <sn-glyph name="chevron-left" :size="18"></sn-glyph><span>会话</span>
-          </button>
-          <span class="row__value">{{ activeCharacter.name }}</span>
-        </div>
-
         <div class="bubble-time">{{ activeCharacter.tagline }}</div>
 
         <div class="bubble-row" v-for="(m, i) in messages" :key="i" :class="{ 'bubble-row--me': m.role === 'me' }">
@@ -720,6 +722,18 @@ window.SN = window.SN || {};
         askReset: askReset,
         subPage: subPage,
         openSub: openSub,
+        /* 头部导航上报：子页时标题显示对应名字，返回键回设置主列表 */
+        navTitle: computed(function () {
+          const names = { api: "API", weather: "天气与位置", data: "数据管理", about: "关于" };
+          return names[subPage.value] || "";
+        }),
+        navIsSub: computed(function () {
+          return Boolean(subPage.value);
+        }),
+        navBack: function () {
+          subPage.value = "";
+        },
+        navBackLabel: "设置",
         version: SN.VERSION
       };
     },
@@ -761,12 +775,6 @@ window.SN = window.SN || {};
 
       <!-- 子页：AI 接口 -->
       <div v-else-if="subPage === 'api'">
-        <div class="app-header__bar">
-          <button class="back-btn" type="button" @click="subPage = ''">
-            <sn-glyph name="chevron-left" :size="18"></sn-glyph><span>设置</span>
-          </button>
-          <span class="row__value">AI 接口</span>
-        </div>
         <p class="field__hint">点一个服务商自动填好地址和模型（推荐 DeepSeek，便宜好用）：</p>
       <div class="chips">
         <button class="chip" type="button" v-for="p in presets" :key="p.id" @click="applyPreset(p)">{{ p.name }}</button>
@@ -825,12 +833,6 @@ window.SN = window.SN || {};
 
       <!-- 子页：天气与位置 -->
       <div v-else-if="subPage === 'weather'">
-        <div class="app-header__bar">
-          <button class="back-btn" type="button" @click="subPage = ''">
-            <sn-glyph name="chevron-left" :size="18"></sn-glyph><span>设置</span>
-          </button>
-          <span class="row__value">天气与位置</span>
-        </div>
       <label class="field">
         <span class="field__label">位置名称（只用于显示）</span>
         <input class="input" v-model="settings.locationName" type="text" placeholder="例如 锦江区" />
@@ -864,12 +866,6 @@ window.SN = window.SN || {};
 
       <!-- 子页：数据管理 -->
       <div v-else-if="subPage === 'data'">
-        <div class="app-header__bar">
-          <button class="back-btn" type="button" @click="subPage = ''">
-            <sn-glyph name="chevron-left" :size="18"></sn-glyph><span>设置</span>
-          </button>
-          <span class="row__value">数据管理</span>
-        </div>
       <div class="list">
         <button class="row" type="button" @click="exportData">
           <span class="row__main">
@@ -899,12 +895,6 @@ window.SN = window.SN || {};
 
       <!-- 子页：关于 -->
       <div v-else-if="subPage === 'about'">
-        <div class="app-header__bar">
-          <button class="back-btn" type="button" @click="subPage = ''">
-            <sn-glyph name="chevron-left" :size="18"></sn-glyph><span>设置</span>
-          </button>
-          <span class="row__value">关于</span>
-        </div>
       <div class="list">
         <div class="row">
           <span class="row__main"><span class="row__label">版本</span></span>
