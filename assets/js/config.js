@@ -16,28 +16,25 @@ window.SN = window.SN || {};
         id      ：唯一标识，同时也决定用哪个页面（见 SN.views）
         name    ：图标下面的名字
         icon    ：图标图形，对应 SN.icons 里的名字
-        gradient：图标底色（CSS 渐变色）
+        （所有图标统一是“无色磨砂玻璃”，外观写在 phone.css 的 .app-icon__box 里）
      ------------------------------------------------------------ */
   SN.apps = [
     {
       id: "chat",
       name: "聊天",
       icon: "chat",
-      gradient: "linear-gradient(180deg, #6fdcff 0%, #2f7bff 100%)",
       intro: "和你的角色聊天，接入 API 后即可真实对话"
     },
     {
       id: "beautify",
       name: "美化",
       icon: "paint",
-      gradient: "linear-gradient(180deg, #ffc0e8 0%, #b06bff 100%)",
       intro: "自定义壁纸与图标外观"
     },
     {
       id: "forum",
       name: "论坛",
       icon: "topic",
-      gradient: "linear-gradient(180deg, #ffd888 0%, #f2851f 100%)",
       intro: "逛帖子、发话题、看大家的角色"
     }
   ];
@@ -50,28 +47,24 @@ window.SN = window.SN || {};
       id: "worldbook",
       name: "世界书",
       icon: "book",
-      gradient: "linear-gradient(180deg, #ffe1a8 0%, #d98c2b 100%)",
       intro: "给 AI 的设定资料库，聊天时会自动参考"
     },
     {
       id: "characters",
       name: "角色集",
       icon: "users",
-      gradient: "linear-gradient(180deg, #d5b8ff 0%, #7c5cff 100%)",
       intro: "管理你的角色卡"
     },
     {
       id: "profile",
       name: "用户",
       icon: "user",
-      gradient: "linear-gradient(180deg, #9ef3d8 0%, #23a48b 100%)",
       intro: "你的个人主页"
     },
     {
       id: "settings",
       name: "设置",
       icon: "sliders",
-      gradient: "linear-gradient(180deg, #cfd4e0 0%, #7c8598 100%)",
       intro: "API 配置、数据备份与导出"
     }
   ];

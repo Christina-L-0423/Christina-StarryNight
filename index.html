@@ -28,10 +28,10 @@
       <!-- .phone 就是手机本体（电脑上显示成手机外壳，手机上是全屏） -->
       <div class="phone" :class="schemeClass">
 
-        <!-- 壁纸：纯 CSS 渐变 + 星点，不依赖任何图片 -->
-        <div class="wallpaper" :style="{ backgroundImage: wallpaper.css }">
+        <!-- 壁纸：内置 6 款是纯 CSS 渐变 + 星点；「美化」里也能添加自己的图片 -->
+        <div class="wallpaper" :class="{ 'wallpaper--image': wallpaper.isImage }" :style="wallpaperStyle">
           <div class="wallpaper__stars" v-if="wallpaper.stars"></div>
-          <div class="wallpaper__glow"></div>
+          <div class="wallpaper__glow" v-if="!wallpaper.isImage"></div>
         </div>
 
         <!-- 灵动岛（装饰） -->
@@ -72,6 +72,7 @@
   <script src="./assets/js/config.js"></script>
   <script src="./assets/js/store.js"></script>
   <script src="./assets/js/weather.js"></script>
+  <script src="./assets/js/mediaStore.js"></script>
   <script src="./assets/js/components.js"></script>
   <script src="./assets/js/views.js"></script>
   <script src="./assets/js/app.js"></script>

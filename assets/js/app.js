@@ -33,10 +33,10 @@
   }
 
   /* 2) 我们自己写的脚本有没有全部加载成功？ */
-  if (!window.SN || !window.SN.store || !window.SN.components) {
+  if (!window.SN || !window.SN.store || !window.SN.components || !window.SN.mediaStore) {
     showError(
       "脚本没能完整加载",
-      "请确认 assets/js 目录下 config.js / store.js / weather.js / components.js / views.js 都在，" +
+      "请确认 assets/js 目录下 config.js / store.js / weather.js / mediaStore.js / components.js / views.js 都在，" +
         "并且 index.html 底部的引入顺序没有被改动。"
     );
     return;
@@ -51,6 +51,7 @@
       return {
         state: store.state,
         wallpaper: store.wallpaper,
+        wallpaperStyle: store.wallpaperStyle,
         schemeClass: store.schemeClass,
         closeApp: store.closeApp
       };
@@ -64,14 +65,30 @@
     app.component(name, SN.components[name]);
   });
 
-  /* ---------- 5) 挂载到 index.html 里的 #app ---------- */
-  app.mount("#app");
+  /* ---------- 5) 先打开本地图片库（自定义壁纸用），再挂载界面 ---------- */
+  Promise.resolve(SN.mediaStore.init ? SN.mediaStore.init() : null)
+    .then(function () {
+      SN.store.hydrateWallpaperImages();
+      app.mount("#app");
 
-  /* 挂载完成后移除启动占位 */
-  window.setTimeout(function () {
-    const boot = document.getElementById("boot");
-    if (boot) boot.remove();
-  }, 80);
+      /* 挂载完成后移除启动占位 */
+      window.setTimeout(function () {
+        const boot = document.getElementById("boot");
+        if (boot) boot.remove();
+      }, 80);
+
+      console.log(
+        "%c StarryNight " +
+          SN.VERSION +
+          " 已启动（Vue " +
+          Vue.version +
+          "）",
+        "color:#8ea2ff"
+      );
+    })
+    .catch(function (err) {
+      showError("图片库初始化失败", String((err && err.message) || err));
+    });
 
   /* ---------- 6) 小体验：按 Esc 返回桌面 ---------- */
   window.addEventListener("keydown", function (event) {
@@ -79,13 +96,4 @@
       SN.store.closeApp();
     }
   });
-
-  console.log(
-    "%c StarryNight " +
-      SN.VERSION +
-      " 已启动（Vue " +
-      Vue.version +
-      "）",
-    "color:#8ea2ff"
-  );
 })();

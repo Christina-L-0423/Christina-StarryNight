@@ -124,12 +124,14 @@ window.SN = window.SN || {};
     },
     emits: ["open"],
     computed: {
+      /* 这里只负责“大小和圆角”。
+         玻璃的样子（无色薄膜、细亮边、模糊）全部写在 phone.css 里，
+         所以所有图标长得一模一样，不做任何单独配色。 */
       boxStyle: function () {
         return {
           width: this.size + "px",
           height: this.size + "px",
-          borderRadius: Math.round(this.size * 0.28) + "px",
-          backgroundImage: this.app.gradient
+          borderRadius: Math.round(this.size * 0.28) + "px"
         };
       },
       glyphSize: function () {

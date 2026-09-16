@@ -151,6 +151,9 @@ window.SN = window.SN || {};
       const settings = store.state.settings;
 
       const wallpapers = SN.wallpapers;
+      const customs = computed(function () {
+        return store.state.customWallpapers;
+      });
       const currentId = computed(function () {
         return settings.wallpaper;
       });
@@ -161,6 +164,60 @@ window.SN = window.SN || {};
 
       function resetWallpaper() {
         settings.wallpaper = SN.defaults.settings.wallpaper;
+      }
+
+      /* ---- 自定义壁纸：选图 → 压缩 → 入库 → 立即使用 ---- */
+      const busy = ref(false);
+      const status = ref("");
+
+      function onAddImages(event) {
+        if (busy.value) {
+          event.target.value = "";
+          return;
+        }
+        const files = Array.prototype.slice.call(event.target.files || []);
+        event.target.value = ""; /* 清空 input，方便下次再选同一张图 */
+        if (!files.length) return;
+
+        busy.value = true;
+        let done = 0;
+        let failed = 0;
+
+        function next() {
+          if (!files.length) {
+            busy.value = false;
+            status.value = failed
+              ? "有 " + failed + " 张图片添加失败（只支持常见图片格式）"
+              : "已添加 " + done + " 张壁纸";
+            window.setTimeout(function () {
+              status.value = "";
+            }, 2600);
+            return;
+          }
+          const file = files.shift();
+          SN.mediaStore
+            .processImageFile(file)
+            .then(function (dataUrl) {
+              /* 名字取文件名（去掉扩展名），最长 12 个字 */
+              const name =
+                String(file.name || "我的壁纸")
+                  .replace(/\.[a-z0-9]+$/i, "")
+                  .slice(0, 12) || "我的壁纸";
+              store.addCustomWallpaper(name, dataUrl);
+              done += 1;
+            })
+            .catch(function (err) {
+              failed += 1;
+              console.warn("[StarryNight] 图片添加失败：", err);
+            })
+            .then(next);
+        }
+        next();
+      }
+
+      function removeImage(id) {
+        if (!window.confirm("确定删除这张自定义壁纸吗？删除后无法找回。")) return;
+        store.removeCustomWallpaper(id);
       }
 
       /* 用 computed 的 get/set 写法，就能直接配合 v-model 使用 */
@@ -184,9 +241,14 @@ window.SN = window.SN || {};
 
       return {
         wallpapers: wallpapers,
+        customs: customs,
         currentId: currentId,
         choose: choose,
         resetWallpaper: resetWallpaper,
+        busy: busy,
+        status: status,
+        onAddImages: onAddImages,
+        removeImage: removeImage,
         dockLabels: dockLabels,
         battery: battery
       };
@@ -201,6 +263,26 @@ window.SN = window.SN || {};
         </button>
       </div>
       <p class="field__hint">选用浅色壁纸时，文字会自动变成深色，保证看得清。</p>
+
+      <p class="section-title">我的壁纸</p>
+      <div class="wallpaper-pick">
+        <label class="wallpaper-pick__add">
+          <sn-glyph name="plus" :size="20"></sn-glyph>
+          <span>{{ busy ? "处理中…" : "添加图片" }}</span>
+          <input type="file" accept="image/*" multiple hidden @change="onAddImages" />
+        </label>
+        <button class="wallpaper-pick__item is-custom" type="button" v-for="w in customs" :key="w.id"
+          :class="{ 'is-active': w.id === currentId, 'is-broken': !w.dataUrl }"
+          :style="{ backgroundImage: w.dataUrl ? 'url(' + w.dataUrl + ')' : 'none' }"
+          @click="choose(w.id)">
+          <span class="wallpaper-pick__name">{{ w.name }}</span>
+          <span class="wallpaper-pick__del" aria-label="删除这张壁纸" @click.stop="removeImage(w.id)">×</span>
+        </button>
+      </div>
+      <p class="field__hint" v-if="status">{{ status }}</p>
+      <p class="field__hint">
+        图片会先压缩再存进你自己的设备浏览器，不会上传到任何服务器；不需要时点右上角的 × 删除。
+      </p>
 
       <p class="section-title">桌面外观</p>
       <div class="list">
@@ -225,7 +307,7 @@ window.SN = window.SN || {};
       </div>
 
       <p class="field__hint">
-        上传自己的壁纸、单独替换某个 APP 的图标，会在后面的版本里加上（需要先做图片存储）。
+        自定义壁纸保存在本地，换浏览器或清除浏览器数据后会丢失；「设置 → 导出备份」可以把它们一起带走。
       </p>
     `
   };

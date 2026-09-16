@@ -42,7 +42,9 @@ window.SN = window.SN || {};
     characters: saved.characters || clone(SN.defaults.characters),
     worldbook: saved.worldbook || clone(SN.defaults.worldbook),
     forumPosts: saved.forumPosts || clone(SN.defaults.forumPosts),
-    chats: saved.chats || clone(SN.defaults.chats)
+    chats: saved.chats || clone(SN.defaults.chats),
+    /* 自定义壁纸列表（只存 id 和名字；图片本体在 mediaStore 的图片库里） */
+    customWallpapers: Array.isArray(saved.customWallpapers) ? saved.customWallpapers : []
   });
 
   /* ---------- 时间：每秒刷新 ---------- */
@@ -66,8 +68,33 @@ window.SN = window.SN || {};
   });
 
   /* ---------- 壁纸与明暗主题 ---------- */
+  const CUSTOM_PREFIX = "custom_";
+
   const wallpaper = computed(function () {
-    return SN.findWallpaper(state.settings.wallpaper);
+    const id = state.settings.wallpaper;
+    if (typeof id === "string" && id.indexOf(CUSTOM_PREFIX) === 0) {
+      const meta = state.customWallpapers.filter(function (w) {
+        return w.id === id;
+      })[0];
+      if (meta) {
+        /* 自定义图片壁纸：按深色主题显示白字，不叠加星点 */
+        return { id: meta.id, name: meta.name, type: "image", isImage: true, scheme: "dark", stars: false };
+      }
+    }
+    return SN.findWallpaper(id) || SN.findWallpaper(SN.defaults.settings.wallpaper);
+  });
+
+  /* 壁纸元素的完整样式：内置壁纸 = CSS 渐变；自定义 = 图片 dataURL */
+  const wallpaperStyle = computed(function () {
+    const wp = wallpaper.value;
+    if (wp.isImage) {
+      const meta =
+        state.customWallpapers.filter(function (w) {
+          return w.id === wp.id;
+        })[0] || {};
+      return { backgroundImage: meta.dataUrl ? 'url("' + meta.dataUrl + '")' : "none" };
+    }
+    return { backgroundImage: wp.css };
   });
 
   const schemeClass = computed(function () {
@@ -92,7 +119,11 @@ window.SN = window.SN || {};
       characters: clone(state.characters),
       worldbook: clone(state.worldbook),
       forumPosts: clone(state.forumPosts),
-      chats: clone(state.chats)
+      chats: clone(state.chats),
+      /* 自定义壁纸只存 id + 名字，图片本体不放进 localStorage（太大了） */
+      customWallpapers: state.customWallpapers.map(function (w) {
+        return { id: w.id, name: w.name };
+      })
     };
   }
 
@@ -113,7 +144,7 @@ window.SN = window.SN || {};
   /* 任何一处数据变化，都会自动保存到本地 */
   watch(
     function () {
-      return [state.settings, state.user, state.characters, state.worldbook, state.forumPosts, state.chats];
+      return [state.settings, state.user, state.characters, state.worldbook, state.forumPosts, state.chats, state.customWallpapers];
     },
     persistSoon,
     { deep: true }
@@ -144,13 +175,50 @@ window.SN = window.SN || {};
     state.chats[characterId] = [];
   }
 
+  /* ---------- 自定义壁纸 ---------- */
+
+  /* 启动时调用：从图片库把图片内容补回列表（列表里平时只有 id 和名字） */
+  function hydrateWallpaperImages() {
+    if (!SN.mediaStore) return;
+    state.customWallpapers.forEach(function (w) {
+      if (!w.dataUrl) {
+        const dataUrl = SN.mediaStore.get(w.id);
+        if (dataUrl) w.dataUrl = dataUrl;
+      }
+    });
+  }
+
+  /* 添加一张自定义壁纸（dataUrl 已经是压缩过的图片），并立即使用 */
+  function addCustomWallpaper(name, dataUrl) {
+    const id = CUSTOM_PREFIX + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    state.customWallpapers.push({ id: id, name: name || "我的壁纸", dataUrl: dataUrl });
+    if (SN.mediaStore) SN.mediaStore.put(id, dataUrl);
+    state.settings.wallpaper = id;
+    return id;
+  }
+
+  /* 删除一张自定义壁纸；如果删的是正在用的，就退回默认壁纸 */
+  function removeCustomWallpaper(id) {
+    const index = state.customWallpapers.findIndex(function (w) {
+      return w.id === id;
+    });
+    if (index === -1) return;
+    state.customWallpapers.splice(index, 1);
+    if (SN.mediaStore) SN.mediaStore.remove(id);
+    if (state.settings.wallpaper === id) {
+      state.settings.wallpaper = SN.defaults.settings.wallpaper;
+    }
+  }
+
   /* ---------- 备份：导出成 JSON 文件 ---------- */
   function exportData() {
     const payload = {
       app: SN.APP_NAME,
       version: SN.VERSION,
       exportedAt: new Date().toISOString(),
-      data: snapshot()
+      data: snapshot(),
+      /* 自定义壁纸的图片一起打包，换设备也能恢复 */
+      images: SN.mediaStore ? SN.mediaStore.entries() : []
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -178,6 +246,32 @@ window.SN = window.SN || {};
     if (Array.isArray(payload.worldbook)) state.worldbook = payload.worldbook;
     if (Array.isArray(payload.forumPosts)) state.forumPosts = payload.forumPosts;
     if (payload.chats) state.chats = payload.chats;
+
+    /* 恢复自定义壁纸：列表 + 把图片写回本机图片库 */
+    const imageMap = {};
+    if (Array.isArray(payload.images)) {
+      payload.images.forEach(function (img) {
+        if (img && img.id && typeof img.dataUrl === "string") imageMap[img.id] = img.dataUrl;
+      });
+    }
+    if (Array.isArray(payload.customWallpapers)) {
+      state.customWallpapers = payload.customWallpapers.map(function (w) {
+        const dataUrl =
+          (w && w.dataUrl) || imageMap[w.id] || (SN.mediaStore ? SN.mediaStore.get(w.id) : null) || "";
+        return { id: w.id, name: w.name, dataUrl: dataUrl };
+      });
+      state.customWallpapers.forEach(function (w) {
+        if (w.dataUrl && SN.mediaStore) SN.mediaStore.put(w.id, w.dataUrl);
+      });
+    }
+    /* 备份里已经不存在的自定义壁纸，别再挂在设置上 */
+    if (typeof state.settings.wallpaper === "string" && state.settings.wallpaper.indexOf("custom_") === 0) {
+      const stillThere = state.customWallpapers.some(function (w) {
+        return w.id === state.settings.wallpaper;
+      });
+      if (!stillThere) state.settings.wallpaper = SN.defaults.settings.wallpaper;
+    }
+
     persistNow();
   }
 
@@ -188,7 +282,9 @@ window.SN = window.SN || {};
       reader.onload = function () {
         try {
           const parsed = JSON.parse(String(reader.result));
-          const payload = parsed && parsed.data ? parsed.data : parsed;
+          const payload = Object.assign({}, parsed && parsed.data ? parsed.data : parsed);
+          /* 图片库（自定义壁纸）单独放在备份文件的顶层，一起合并进恢复数据 */
+          if (parsed && Array.isArray(parsed.images)) payload.images = parsed.images;
           if (!payload || typeof payload !== "object") {
             throw new Error("这个文件看起来不是小手机的备份");
           }
@@ -213,6 +309,8 @@ window.SN = window.SN || {};
     state.worldbook = clone(SN.defaults.worldbook);
     state.forumPosts = clone(SN.defaults.forumPosts);
     state.chats = clone(SN.defaults.chats);
+    state.customWallpapers = [];
+    if (SN.mediaStore && SN.mediaStore.clear) SN.mediaStore.clear();
     state.activeApp = null;
     persistNow();
   }
@@ -222,10 +320,14 @@ window.SN = window.SN || {};
     state: state,
     clock: clock,
     wallpaper: wallpaper,
+    wallpaperStyle: wallpaperStyle,
     schemeClass: schemeClass,
     weather: weather,
     openApp: openApp,
     closeApp: closeApp,
+    hydrateWallpaperImages: hydrateWallpaperImages,
+    addCustomWallpaper: addCustomWallpaper,
+    removeCustomWallpaper: removeCustomWallpaper,
     pushMessage: pushMessage,
     clearChat: clearChat,
     timeStamp: timeStamp,
