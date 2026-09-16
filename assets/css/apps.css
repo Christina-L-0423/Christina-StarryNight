@@ -626,3 +626,61 @@
   opacity: 0.45;
   cursor: default;
 }
+
+/* ---------- Stage 2：AI 对话相关 ---------- */
+
+/* 聊天页里的出错提示条（接口报错时显示，人话解释） */
+.api-error {
+  margin: 10px 0 4px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: rgba(255, 92, 110, 0.12);
+  border: 1px solid rgba(255, 92, 110, 0.35);
+  color: #ff8fa0;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.theme-light .api-error {
+  color: #c2344d;
+  background: rgba(194, 52, 77, 0.08);
+  border-color: rgba(194, 52, 77, 0.3);
+}
+
+/* 「对方正在输入」的三个跳动小点 */
+.typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+}
+
+.typing i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.35;
+  animation: sn-typing 1.2s infinite ease-in-out;
+}
+
+.typing i:nth-child(2) { animation-delay: 0.15s; }
+.typing i:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes sn-typing {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+  30% { transform: translateY(-3px); opacity: 0.9; }
+}
+
+/* 设置页「测试连接」的结果文字：成功绿 / 失败红 */
+.field__hint.is-ok { color: #4ade80; }
+.field__hint.is-bad { color: #ff8fa0; }
+
+.theme-light .field__hint.is-ok { color: #0f9d58; }
+.theme-light .field__hint.is-bad { color: #c2344d; }
+
+/* 生成中的「停止」按钮（替代发送键出现） */
+.send-btn--stop {
+  font-size: 12px;
+  letter-spacing: 1px;
+}

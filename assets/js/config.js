@@ -230,16 +230,63 @@ window.SN = window.SN || {};
   };
 
   /* ------------------------------------------------------------
+     5.5) 常用服务商预设（OpenAI 兼容）
+          设置页点一下就自动填好地址和模型；密钥仍需自己注册获取。
+     ------------------------------------------------------------ */
+  SN.apiPresets = [
+    {
+      id: "deepseek",
+      name: "DeepSeek",
+      baseUrl: "https://api.deepseek.com/v1",
+      model: "deepseek-chat",
+      hint: "platform.deepseek.com 注册并创建 Key，价格便宜"
+    },
+    {
+      id: "siliconflow",
+      name: "硅基流动",
+      baseUrl: "https://api.siliconflow.cn/v1",
+      model: "deepseek-ai/DeepSeek-V3",
+      hint: "cloud.siliconflow.cn 注册并创建 Key，有免费额度"
+    },
+    {
+      id: "openrouter",
+      name: "OpenRouter",
+      baseUrl: "https://openrouter.ai/api/v1",
+      model: "openai/gpt-4o-mini",
+      hint: "openrouter.ai 一个 Key 用多家模型"
+    },
+    {
+      id: "openai",
+      name: "OpenAI",
+      baseUrl: "https://api.openai.com/v1",
+      model: "gpt-4o-mini",
+      hint: "platform.openai.com 创建 Key"
+    },
+    {
+      id: "ollama",
+      name: "本地 Ollama",
+      baseUrl: "http://localhost:11434/v1",
+      model: "qwen2.5:7b",
+      hint: "本机运行，无需密钥，需允许跨域（OLLAMA_ORIGINS=*）"
+    }
+  ];
+
+  /* ------------------------------------------------------------
      6) 首次打开时的默认数据
         （之后都会存在浏览器本地存储里，不再使用这些默认值）
      ------------------------------------------------------------ */
   SN.defaults = {
     settings: {
-      /* AI 接口：填写后聊天页就能真正对话（Stage 2 接入） */
-      apiBaseUrl: "",
-      apiKey: "",
-      model: "",
-      temperature: 0.8,
+      /* AI 接口（OpenAI 兼容格式）：填好后聊天页即可真实对话 */
+      api: {
+        baseUrl: "",
+        apiKey: "",
+        model: "",
+        temperature: 0.8,
+        maxTokens: 1024,
+        contextCount: 20,
+        stream: true
+      },
       /* 天气与位置 */
       locationName: "锦江区",
       latitude: 30.67,
@@ -264,6 +311,8 @@ window.SN = window.SN || {};
         id: "christina",
         name: "克里斯蒂娜",
         tagline: "陪你熬夜看星星的人",
+        persona:
+          "克里斯蒂娜，二十多岁，喜欢熬夜看星星，是用户的老朋友。说话温柔简短，偶尔关心一句，偶尔小小地调侃一下。",
         gradient: "linear-gradient(150deg, #8ea2ff, #c86bff)",
         greeting: "又见面啦。今晚的星星很好看，想聊点什么？"
       },
@@ -271,6 +320,7 @@ window.SN = window.SN || {};
         id: "xingye",
         name: "星野零零",
         tagline: "喜欢讲冷笑话的 AI 研究员",
+        persona: "星野零零，年轻的研究员，好奇心旺盛，喜欢讲冷笑话，说话活泼跳跃。",
         gradient: "linear-gradient(150deg, #79e0ff, #3b82f6)",
         greeting: "欢迎回来！我今天学会了一个新笑话，要听吗？"
       },
@@ -278,6 +328,7 @@ window.SN = window.SN || {};
         id: "yohang",
         name: "夜航星",
         tagline: "沉默但很可靠的深夜电台主播",
+        persona: "夜航星，深夜电台主播，话不多但很可靠，语气沉稳，善于倾听，像深夜里的一盏灯。",
         gradient: "linear-gradient(150deg, #ffc978, #f2740f)",
         greeting: "现在是深夜电台时间，我在听。"
       }

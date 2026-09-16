@@ -11,9 +11,9 @@ window.SN = window.SN || {};
 
   const { ref, computed, nextTick } = Vue;
 
-  /* 找不到数据时的兜底提示文字 */
-  const MOCK_REPLY =
-    "（本地示例回复）我已经收到啦。等你在「设置 → AI 接口」里填好地址和密钥，这里会变成真正的回答。";
+  /* 还没配置 API 时的本地演示回复（保证不配置也能玩） */
+  const LOCAL_REPLY =
+    "（本地演示回复）我还没连上真正的 AI。去「设置 → AI 接口」选一个服务商、填好密钥，点「测试连接」，我就能真正开口啦。";
 
   /* ============================================================
      1) 聊天：会话列表 → 点进去是聊天界面
@@ -65,6 +65,8 @@ window.SN = window.SN || {};
         activeId.value = null;
       }
 
+      const errorText = ref("");
+
       function send() {
         const text = draft.value.trim();
         if (!text || !activeId.value || sending.value) return;
@@ -72,15 +74,63 @@ window.SN = window.SN || {};
         const targetId = activeId.value;
         store.pushMessage(targetId, "me", text);
         draft.value = "";
+        errorText.value = "";
+        sending.value = true;
         scrollToBottom();
 
-        /* 这里先给一个本地假回复，方便看效果；接入 API 后替换成真实请求 */
-        sending.value = true;
-        window.setTimeout(function () {
-          store.pushMessage(targetId, "them", MOCK_REPLY);
+        /* 还没配置 API → 本地演示回复，保证应用始终可用 */
+        if (!SN.api.isConfigured()) {
+          window.setTimeout(function () {
+            store.pushMessage(targetId, "them", LOCAL_REPLY);
+            sending.value = false;
+            scrollToBottom();
+          }, 450);
+          return;
+        }
+
+        /* 真实对话：先按当前历史组装消息，再放一个空气泡当“打字中” */
+        let request;
+        try {
+          request = SN.api.buildMessages(targetId);
+        } catch (err) {
           sending.value = false;
-          scrollToBottom();
-        }, 700);
+          errorText.value = err && err.message ? err.message : "消息组装失败。";
+          return;
+        }
+
+        store.pushMessage(targetId, "them", "");
+        const list = store.state.chats[targetId];
+        const bubble = list[list.length - 1];
+
+        SN.api
+          .chat({
+            messages: request,
+            onDelta: function (full) {
+              bubble.text = full;
+              scrollToBottom();
+            }
+          })
+          .then(function (full) {
+            if (!bubble.text) bubble.text = full || "…";
+            sending.value = false;
+            scrollToBottom();
+          })
+          .catch(function (err) {
+            const index = list.indexOf(bubble);
+            if (index !== -1 && !bubble.text) list.splice(index, 1);
+            if (err && err.name === "AbortError") {
+              store.pushMessage(targetId, "them", "（已停止生成）");
+            } else {
+              errorText.value = (err && err.message) || "请求失败，请稍后再试。";
+            }
+            sending.value = false;
+            scrollToBottom();
+          });
+      }
+
+      /* 生成过程中可以点停止 */
+      function stopReply() {
+        SN.api.cancel();
       }
 
       return {
@@ -89,10 +139,12 @@ window.SN = window.SN || {};
         messages: messages,
         draft: draft,
         sending: sending,
+        errorText: errorText,
         lastText: lastText,
         openChat: openChat,
         backToList: backToList,
-        send: send
+        send: send,
+        stopReply: stopReply
       };
     },
     template: `
@@ -109,8 +161,8 @@ window.SN = window.SN || {};
           </button>
         </div>
         <p class="field__hint">
-          现在是本地示例会话（只存在你自己的浏览器里）。接入真实 AI 需要到
-          「设置 → AI 接口」填写接口地址与密钥。
+          聊天通过 OpenAI 兼容接口发送给 AI。还没配置的话，到「设置 → AI 接口」
+          选一个服务商、填好密钥，点「测试连接」就能开聊。
         </p>
       </div>
 
@@ -125,14 +177,20 @@ window.SN = window.SN || {};
         <div class="bubble-time">{{ activeCharacter.tagline }}</div>
 
         <div class="bubble-row" v-for="(m, i) in messages" :key="i" :class="{ 'bubble-row--me': m.role === 'me' }">
-          <div class="bubble" :class="m.role === 'me' ? 'bubble--me' : 'bubble--them'">{{ m.text }}</div>
+          <div class="bubble" :class="m.role === 'me' ? 'bubble--me' : 'bubble--them'">
+            <template v-if="m.text">{{ m.text }}</template>
+            <span v-else class="typing" aria-label="对方正在输入"><i></i><i></i><i></i></span>
+          </div>
         </div>
 
         <div class="empty" v-if="!messages.length">还没有消息，说点什么吧。</div>
 
+        <div class="api-error" v-if="errorText">{{ errorText }}</div>
+
         <form class="composer" @submit.prevent="send">
           <input class="input" v-model="draft" type="text" placeholder="说点什么…" />
-          <button class="send-btn" type="submit" :disabled="!draft.trim()">
+          <button v-if="sending" class="send-btn send-btn--stop" type="button" title="停止生成" @click="stopReply">■</button>
+          <button v-else class="send-btn" type="submit" :disabled="!draft.trim()">
             <sn-glyph name="send" :size="18"></sn-glyph>
           </button>
         </form>
@@ -563,6 +621,39 @@ window.SN = window.SN || {};
         });
       }
 
+      /* ---- AI 接口：服务商预设 + 测试连接 ---- */
+      const presets = SN.apiPresets || [];
+      const testing = ref(false);
+      const apiStatus = ref("");
+      const apiStatusOk = ref(false);
+
+      function applyPreset(preset) {
+        settings.api.baseUrl = preset.baseUrl;
+        settings.api.model = preset.model;
+        apiStatusOk.value = false;
+        apiStatus.value =
+          "已填入「" + preset.name + "」的地址和模型（" + preset.hint + "）。再填入你的 API Key 即可。";
+      }
+
+      function testApi() {
+        if (testing.value) return;
+        testing.value = true;
+        apiStatus.value = "正在测试连接…";
+        SN.api
+          .testConnection()
+          .then(function (result) {
+            apiStatusOk.value = !!result.ok;
+            apiStatus.value = result.ok ? "连接成功！模型回复：「" + result.reply + "」" : result.message;
+          })
+          .catch(function () {
+            apiStatusOk.value = false;
+            apiStatus.value = "测试失败，请检查配置后重试。";
+          })
+          .then(function () {
+            testing.value = false;
+          });
+      }
+
       const useLiveWeather = bindSetting("useLiveWeather");
 
       function refreshWeather() {
@@ -608,6 +699,12 @@ window.SN = window.SN || {};
         weather: weather,
         status: status,
         fileInput: fileInput,
+        presets: presets,
+        testing: testing,
+        apiStatus: apiStatus,
+        apiStatusOk: apiStatusOk,
+        applyPreset: applyPreset,
+        testApi: testApi,
         useLiveWeather: useLiveWeather,
         refreshWeather: refreshWeather,
         exportData: exportData,
@@ -619,29 +716,58 @@ window.SN = window.SN || {};
     },
     template: `
       <p class="section-title">AI 接口</p>
+      <p class="field__hint">点一个服务商自动填好地址和模型（推荐 DeepSeek，便宜好用）：</p>
+      <div class="chips">
+        <button class="chip" type="button" v-for="p in presets" :key="p.id" @click="applyPreset(p)">{{ p.name }}</button>
+      </div>
       <label class="field">
         <span class="field__label">接口地址 Base URL</span>
-        <input class="input" v-model="settings.apiBaseUrl" type="text" placeholder="例如 https://api.openai.com/v1" />
+        <input class="input" v-model="settings.api.baseUrl" type="text" placeholder="https://api.deepseek.com/v1" />
       </label>
       <label class="field">
         <span class="field__label">API Key</span>
-        <input class="input" v-model="settings.apiKey" type="password" placeholder="sk-...（只保存在本机）" />
+        <input class="input" v-model="settings.api.apiKey" type="password" placeholder="sk-...（只保存在本机）" />
       </label>
       <label class="field">
         <span class="field__label">模型名称</span>
-        <input class="input" v-model="settings.model" type="text" placeholder="例如 gpt-4o-mini" />
+        <input class="input" v-model="settings.api.model" type="text" placeholder="deepseek-chat" />
       </label>
       <div class="list">
         <div class="row">
           <span class="row__main">
             <span class="row__label">随机性 temperature</span>
-            <span class="row__sub">越小越稳重，越大越有想象力</span>
+            <span class="row__sub">越小越稳重，越大越有想象力（当前 {{ settings.api.temperature }}）</span>
           </span>
-          <input class="range" type="range" min="0" max="2" step="0.1" v-model.number="settings.temperature" />
+          <input class="range" type="range" min="0" max="2" step="0.1" v-model.number="settings.api.temperature" />
+        </div>
+        <div class="row">
+          <span class="row__main">
+            <span class="row__label">回复长度上限</span>
+            <span class="row__sub">max_tokens（当前 {{ settings.api.maxTokens }}）</span>
+          </span>
+          <input class="range" type="range" min="256" max="4096" step="128" v-model.number="settings.api.maxTokens" />
+        </div>
+        <div class="row">
+          <span class="row__main">
+            <span class="row__label">携带最近聊天</span>
+            <span class="row__sub">一次带多少条历史给 AI（当前 {{ settings.api.contextCount }}）</span>
+          </span>
+          <input class="range" type="range" min="4" max="50" step="2" v-model.number="settings.api.contextCount" />
+        </div>
+        <div class="row">
+          <span class="row__main">
+            <span class="row__label">流式输出</span>
+            <span class="row__sub">开启后回复像打字一样逐字出现</span>
+          </span>
+          <sn-switch v-model="settings.api.stream"></sn-switch>
         </div>
       </div>
+      <div class="btn-row">
+        <button class="btn" type="button" :disabled="testing" @click="testApi">{{ testing ? "正在测试…" : "测试连接" }}</button>
+      </div>
+      <p class="field__hint" v-if="apiStatus" :class="apiStatusOk ? 'is-ok' : 'is-bad'">{{ apiStatus }}</p>
       <p class="field__hint">
-        配置只保存在你自己的浏览器里，不会上传到任何服务器。真实对话请求会在 Stage 2 接上。
+        密钥只保存在你自己的浏览器里；聊天请求从你的设备直达服务商。导出备份会包含密钥，请保管好备份文件。
       </p>
 
       <p class="section-title">天气与位置</p>

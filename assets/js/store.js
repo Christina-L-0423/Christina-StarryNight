@@ -33,11 +33,18 @@ window.SN = window.SN || {};
 
   const saved = readStorage();
 
+  /* 设置合并：settings.api 是嵌套对象，浅合并会在旧数据上丢新字段，所以单独深合并 */
+  function mergeSettings(savedSettings) {
+    const merged = Object.assign(clone(SN.defaults.settings), savedSettings || {});
+    merged.api = Object.assign(clone(SN.defaults.settings.api), (savedSettings && savedSettings.api) || {});
+    return merged;
+  }
+
   /* ---------- 全局状态 ---------- */
   const state = reactive({
     /** 当前打开的应用 id；null 表示正在看桌面 */
     activeApp: null,
-    settings: Object.assign(clone(SN.defaults.settings), saved.settings || {}),
+    settings: mergeSettings(saved.settings),
     user: Object.assign(clone(SN.defaults.user), saved.user || {}),
     characters: saved.characters || clone(SN.defaults.characters),
     worldbook: saved.worldbook || clone(SN.defaults.worldbook),
@@ -240,7 +247,10 @@ window.SN = window.SN || {};
   }
 
   function applySnapshot(payload) {
-    if (payload.settings) Object.assign(state.settings, payload.settings);
+    if (payload.settings) {
+      /* 深合并，保证嵌套的 settings.api 字段在旧备份上也完整 */
+      state.settings = mergeSettings(payload.settings);
+    }
     if (payload.user) Object.assign(state.user, payload.user);
     if (Array.isArray(payload.characters)) state.characters = payload.characters;
     if (Array.isArray(payload.worldbook)) state.worldbook = payload.worldbook;

@@ -33,10 +33,10 @@
   }
 
   /* 2) 我们自己写的脚本有没有全部加载成功？ */
-  if (!window.SN || !window.SN.store || !window.SN.components || !window.SN.mediaStore) {
+  if (!window.SN || !window.SN.store || !window.SN.components || !window.SN.mediaStore || !window.SN.api) {
     showError(
       "脚本没能完整加载",
-      "请确认 assets/js 目录下 config.js / store.js / weather.js / mediaStore.js / components.js / views.js 都在，" +
+      "请确认 assets/js 目录下 config.js / store.js / weather.js / mediaStore.js / api.js / components.js / views.js 都在，" +
         "并且 index.html 底部的引入顺序没有被改动。"
     );
     return;
