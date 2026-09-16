@@ -630,11 +630,13 @@ window.SN = window.SN || {};
       const apiStatusOk = ref(false);
 
       function applyPreset(preset) {
-        settings.api.baseUrl = preset.baseUrl;
-        settings.api.model = preset.model;
+        /* 「自定义」不带地址和模型：不清空已填内容，只给提示 */
+        if (preset.baseUrl) settings.api.baseUrl = preset.baseUrl;
+        if (preset.model) settings.api.model = preset.model;
         apiStatusOk.value = false;
-        apiStatus.value =
-          "已填入「" + preset.name + "」的地址和模型（" + preset.hint + "）。再填入你的 API Key 即可。";
+        apiStatus.value = preset.baseUrl
+          ? "已填入「" + preset.name + "」的地址和模型（" + preset.hint + "）。再填入你的 API Key 即可。"
+          : "自定义模式：" + preset.hint + "。";
       }
 
       function testApi() {
@@ -654,6 +656,35 @@ window.SN = window.SN || {};
           .then(function () {
             testing.value = false;
           });
+      }
+
+      /* ---- 拉取服务商模型列表（模型输入框旁的循环按钮） ---- */
+      const models = ref([]);
+      const showModels = ref(false);
+      const loadingModels = ref(false);
+      const modelsError = ref("");
+
+      function fetchModels() {
+        if (loadingModels.value) return;
+        loadingModels.value = true;
+        modelsError.value = "";
+        SN.api
+          .listModels()
+          .then(function (ids) {
+            models.value = ids;
+            showModels.value = true;
+          })
+          .catch(function (err) {
+            modelsError.value = err && err.message ? err.message : "拉取失败，请稍后再试。";
+          })
+          .then(function () {
+            loadingModels.value = false;
+          });
+      }
+
+      function pickModel(id) {
+        settings.api.model = id;
+        showModels.value = false;
       }
 
       const useLiveWeather = bindSetting("useLiveWeather");
@@ -714,6 +745,12 @@ window.SN = window.SN || {};
         apiStatusOk: apiStatusOk,
         applyPreset: applyPreset,
         testApi: testApi,
+        models: models,
+        showModels: showModels,
+        loadingModels: loadingModels,
+        modelsError: modelsError,
+        fetchModels: fetchModels,
+        pickModel: pickModel,
         useLiveWeather: useLiveWeather,
         refreshWeather: refreshWeather,
         exportData: exportData,
@@ -787,10 +824,17 @@ window.SN = window.SN || {};
         <span class="field__label">API Key</span>
         <input class="input" v-model="settings.api.apiKey" type="password" placeholder="sk-...（只保存在本机）" />
       </label>
-      <label class="field">
+      <div class="field">
         <span class="field__label">模型名称</span>
-        <input class="input" v-model="settings.api.model" type="text" placeholder="deepseek-chat" />
-      </label>
+        <div class="model-row">
+          <input class="input" v-model="settings.api.model" type="text" placeholder="deepseek-chat" />
+          <button class="model-fetch" :class="{ 'is-loading': loadingModels }" type="button"
+            title="拉取模型列表" :disabled="loadingModels" @click="fetchModels">
+            <sn-glyph name="refresh" :size="16"></sn-glyph>
+          </button>
+        </div>
+        <p class="field__hint is-bad" v-if="modelsError">{{ modelsError }}</p>
+      </div>
       <div class="list">
         <div class="row">
           <span class="row__main">
@@ -829,6 +873,20 @@ window.SN = window.SN || {};
         密钥只保存在你自己的浏览器里；聊天请求从你的设备直达服务商。导出备份会包含密钥，请保管好备份文件。
       </p>
 
+      <!-- 模型选择弹窗：拉取后从底部弹出，按首字母排序 -->
+      <div class="modal-mask" v-if="showModels" @click.self="showModels = false">
+        <div class="modal">
+          <div class="modal__head">
+            <span class="modal__title">选择模型</span>
+            <button class="modal__close" type="button" @click="showModels = false">×</button>
+          </div>
+          <div class="modal__body">
+            <button class="modal__item" type="button" v-for="m in models" :key="m"
+              :class="{ 'is-current': m === settings.api.model }" @click="pickModel(m)">{{ m }}</button>
+          </div>
+          <div class="modal__foot">共 {{ models.length }} 个模型 · 按首字母排序</div>
+        </div>
+      </div>
       </div>
 
       <!-- 子页：天气与位置 -->

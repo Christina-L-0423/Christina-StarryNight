@@ -101,6 +101,9 @@ window.SN = window.SN || {};
       '<path d="M15 4.5 7.5 12l7.5 7.5" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>',
     "chevron-right":
       '<path d="M9 4.5 16.5 12 9 19.5" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>',
+    refresh:
+      '<path d="M20 12a8 8 0 1 1-2.34-5.66" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>' +
+      '<path d="M20 3.6v3.5h-3.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>',
     send:
       '<path d="M3.4 11.3 20.2 4.1c.7-.3 1.4.4 1.1 1.1l-7.1 16.8c-.3.7-1.4.7-1.6-.1l-1.5-6.1-6.1-1.5c-.8-.2-.8-1.3 0-1.6Z" fill="currentColor"/>',
     pin:
@@ -268,6 +271,13 @@ window.SN = window.SN || {};
       baseUrl: "http://localhost:11434/v1",
       model: "qwen2.5:7b",
       hint: "本机运行，无需密钥，需允许跨域（OLLAMA_ORIGINS=*）"
+    },
+    {
+      id: "custom",
+      name: "自定义",
+      baseUrl: "",
+      model: "",
+      hint: "手动填写任意 OpenAI 兼容接口的地址与模型"
     }
   ];
 

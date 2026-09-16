@@ -16,15 +16,21 @@ window.SN = window.SN || {};
     return SN.store.state.settings.api;
   }
 
+  /* 从 Base URL 推出根地址：去掉尾部斜杠和可能已带上的 /chat/completions 尾巴 */
+  function rootUrl(baseUrl) {
+    let url = String(baseUrl || "").trim().replace(/\/+$/, "");
+    const tail = "/chat/completions";
+    if (url && url.indexOf(tail) === url.length - tail.length) {
+      url = url.slice(0, url.length - tail.length);
+    }
+    return url;
+  }
+
   /* 把 Base URL 拼成完整的 chat/completions 地址
      （用户填 https://api.deepseek.com/v1 或填到域名根都行） */
   function joinUrl(baseUrl) {
-    let url = String(baseUrl || "").trim().replace(/\/+$/, "");
-    if (!url) return "";
-    if (url.indexOf("/chat/completions") !== url.length - "/chat/completions".length) {
-      url += "/chat/completions";
-    }
-    return url;
+    const root = rootUrl(baseUrl);
+    return root ? root + "/chat/completions" : "";
   }
 
   function isLocalUrl(url) {
@@ -251,12 +257,51 @@ window.SN = window.SN || {};
       });
   }
 
+  /* 拉取服务商的模型列表（OpenAI 兼容：GET /models），按首字母排序 */
+  function listModels() {
+    const api = apiSettings();
+    if (!api.baseUrl) {
+      return Promise.reject(new Error("请先填写接口地址 Base URL。"));
+    }
+    if (!api.apiKey && !isLocalUrl(api.baseUrl)) {
+      return Promise.reject(new Error("请先填写 API Key（本地 Ollama 可以不填）。"));
+    }
+    const headers = {};
+    if (api.apiKey) headers.Authorization = "Bearer " + String(api.apiKey).trim();
+    return fetch(rootUrl(api.baseUrl) + "/models", { headers: headers })
+      .then(function (resp) {
+        if (!resp.ok) {
+          return resp.text().then(function (raw) {
+            throw new Error("HTTP " + resp.status + (raw ? " " + String(raw).slice(0, 200) : ""));
+          });
+        }
+        return resp.json();
+      })
+      .then(function (data) {
+        const rows = data && Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : [];
+        const ids = rows
+          .map(function (m) {
+            return (m && (m.id || m.name)) || "";
+          })
+          .filter(Boolean);
+        if (!ids.length) throw new Error("服务商没有返回模型列表");
+        ids.sort(function (a, b) {
+          return a.toLowerCase().localeCompare(b.toLowerCase());
+        });
+        return ids;
+      })
+      .catch(function (err) {
+        throw new Error(friendlyError(err));
+      });
+  }
+
   SN.api = {
     isConfigured: isConfigured,
     buildMessages: buildMessages,
     chat: chat,
     cancel: cancel,
     testConnection: testConnection,
+    listModels: listModels,
     joinUrl: joinUrl,
     /* 下划线开头 = 内部工具，暴露出来给自动化测试用 */
     _parseSSELines: parseSSELines
