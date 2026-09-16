@@ -8,7 +8,7 @@ window.SN = window.SN || {};
 (function (SN) {
   "use strict";
 
-  SN.VERSION = "0.1.0";
+  SN.VERSION = "0.0.4";
   SN.APP_NAME = "StarryNight";
 
   /* ------------------------------------------------------------
@@ -286,7 +286,7 @@ window.SN = window.SN || {};
      ------------------------------------------------------------ */
   SN.changelog = [
     {
-      version: "v0.4",
+      version: "v0.0.4",
       date: "2026-09-16",
       title: "模型拉取与自定义接口",
       items: [
@@ -296,7 +296,7 @@ window.SN = window.SN || {};
       ]
     },
     {
-      version: "v0.3",
+      version: "v0.0.3",
       date: "2026-09-16",
       title: "满屏子页与导航",
       items: [
@@ -306,7 +306,7 @@ window.SN = window.SN || {};
       ]
     },
     {
-      version: "v0.2",
+      version: "v0.0.2",
       date: "2026-09-16",
       title: "接入 AI 与自定义壁纸",
       items: [
@@ -316,7 +316,7 @@ window.SN = window.SN || {};
       ]
     },
     {
-      version: "v0.1",
+      version: "v0.0.1",
       date: "2026-09-16",
       title: "小手机框架",
       items: [

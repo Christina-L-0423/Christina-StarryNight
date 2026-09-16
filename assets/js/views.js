@@ -272,8 +272,15 @@ window.SN = window.SN || {};
       }
 
       function removeImage(id) {
-        if (!window.confirm("确定删除这张自定义壁纸吗？删除后无法找回。")) return;
-        store.removeCustomWallpaper(id);
+        SN.ui
+          .confirm({
+            message: "确定删除这张自定义壁纸吗？删除后无法找回。",
+            confirmText: "删除",
+            danger: true
+          })
+          .then(function (ok) {
+            if (ok) store.removeCustomWallpaper(id);
+          });
       }
 
       /* 用 computed 的 get/set 写法，就能直接配合 v-model 使用 */
@@ -697,9 +704,17 @@ window.SN = window.SN || {};
       }
 
       function askReset() {
-        if (!window.confirm("确定要清空所有本地数据吗？聊天记录也会一起删除，且无法撤销。")) return;
-        store.resetAll();
-        status.value = "已恢复出厂设置。";
+        SN.ui
+          .confirm({
+            message: "确定要清空所有本地数据吗？聊天记录也会一起删除，且无法撤销。",
+            confirmText: "清空",
+            danger: true
+          })
+          .then(function (ok) {
+            if (!ok) return;
+            store.resetAll();
+            status.value = "已恢复出厂设置。";
+          });
       }
 
       /* ---- 设置内部分页："" = 主列表；"api" | "weather" | "data" | "about" ---- */

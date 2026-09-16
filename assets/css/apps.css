@@ -822,6 +822,77 @@
   from { transform: translateY(40%); opacity: 0.4; }
 }
 
+/* ---------- 全局确认弹窗（标题固定为 StarryNight，替代原生弹窗） ---------- */
+.ui-dialog-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 36px;
+  animation: sn-fade 0.18s ease;
+}
+
+.ui-dialog {
+  width: 100%;
+  max-width: 300px;
+  border-radius: var(--r-lg);
+  background: var(--screen-bg);
+  backdrop-filter: var(--screen-blur);
+  -webkit-backdrop-filter: var(--screen-blur);
+  box-shadow: var(--glass-shadow);
+  overflow: hidden;
+  animation: sn-rise 0.22s var(--ease);
+}
+
+.ui-dialog__title {
+  padding: 18px 18px 6px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--text-1);
+}
+
+.ui-dialog__msg {
+  padding: 0 18px 18px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-2);
+  word-break: break-all;
+}
+
+.ui-dialog__btns {
+  display: flex;
+  border-top: 0.5px solid var(--hairline);
+}
+
+.ui-dialog__btn {
+  flex: 1;
+  padding: 13px 0;
+  border: none;
+  background: none;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.ui-dialog__btn + .ui-dialog__btn {
+  border-left: 0.5px solid var(--hairline);
+}
+
+.ui-dialog__btn--primary {
+  color: var(--accent);
+}
+
+.ui-dialog__btn--danger {
+  color: var(--danger);
+}
+
 /* ---------- 更新日志 ---------- */
 .changelog {
   padding-top: 4px;

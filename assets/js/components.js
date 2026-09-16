@@ -271,4 +271,39 @@ window.SN = window.SN || {};
       "</div>" +
       "</section>"
   };
+  /* ------------------------------------------------------------
+     10) 全局确认弹窗：替代浏览器原生 confirm。
+         原生弹窗的标题是网址（改不了），这个的标题固定为 StarryNight。
+     ------------------------------------------------------------ */
+  SN.ui = {
+    confirm: function (options) {
+      const opts = typeof options === "string" ? { message: options } : options || {};
+      return new Promise(function (resolve) {
+        const primaryClass = opts.danger ? "ui-dialog__btn--danger" : "ui-dialog__btn--primary";
+        const mask = document.createElement("div");
+        mask.className = "ui-dialog-mask";
+        mask.innerHTML =
+          '<div class="ui-dialog" role="dialog" aria-modal="true">' +
+          '<div class="ui-dialog__title">' + SN.APP_NAME + "</div>" +
+          '<div class="ui-dialog__msg"></div>' +
+          '<div class="ui-dialog__btns">' +
+          '<button type="button" class="ui-dialog__btn" data-act="cancel">' + (opts.cancelText || "取消") + "</button>" +
+          '<button type="button" class="ui-dialog__btn ' + primaryClass + '" data-act="ok">' + (opts.confirmText || "确定") + "</button>" +
+          "</div>" +
+          "</div>";
+        mask.querySelector(".ui-dialog__msg").textContent = opts.message || "";
+        function close(result) {
+          if (mask.parentNode) mask.parentNode.removeChild(mask);
+          resolve(result);
+        }
+        mask.addEventListener("click", function (event) {
+          const act = event.target.getAttribute && event.target.getAttribute("data-act");
+          if (act === "ok") close(true);
+          else if (act === "cancel") close(false);
+          else if (event.target === mask) close(false);
+        });
+        document.body.appendChild(mask);
+      });
+    }
+  };
 })(window.SN);
