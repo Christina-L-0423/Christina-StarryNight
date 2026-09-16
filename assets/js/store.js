@@ -33,6 +33,45 @@ window.SN = window.SN || {};
 
   const saved = readStorage();
 
+  /* 一次性数据迁移（v0.4）：默认示例世界书清空、默认角色只保留 Christina。
+     只对老数据跑一次并打标记；之后用户自己添加的内容、导入的备份都不会再被动。 */
+  const MIGRATIONS_KEY = "starrynight.migrations.v1";
+  (function runMigrations() {
+    let flags = {};
+    try {
+      flags = JSON.parse(localStorage.getItem(MIGRATIONS_KEY) || "{}") || {};
+    } catch (err) {
+      flags = {};
+    }
+    let changed = false;
+    if (!flags.removeSampleWorldbook) {
+      if (Array.isArray(saved.worldbook)) saved.worldbook = [];
+      flags.removeSampleWorldbook = true;
+      changed = true;
+    }
+    if (!flags.keepOnlyChristina) {
+      if (Array.isArray(saved.characters)) {
+        saved.characters = saved.characters.filter(function (c) {
+          return c && c.id === "christina";
+        });
+      }
+      if (saved.chats && typeof saved.chats === "object") {
+        Object.keys(saved.chats).forEach(function (key) {
+          if (key !== "christina") delete saved.chats[key];
+        });
+      }
+      flags.keepOnlyChristina = true;
+      changed = true;
+    }
+    if (changed) {
+      try {
+        localStorage.setItem(MIGRATIONS_KEY, JSON.stringify(flags));
+      } catch (err) {
+        /* 存不上标记也没关系：本次会话内已经清理完成 */
+      }
+    }
+  })();
+
   /* 设置合并：settings.api 是嵌套对象，浅合并会在旧数据上丢新字段，所以单独深合并 */
   function mergeSettings(savedSettings) {
     const merged = Object.assign(clone(SN.defaults.settings), savedSettings || {});

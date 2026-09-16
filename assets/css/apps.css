@@ -821,3 +821,47 @@
 @keyframes sn-rise {
   from { transform: translateY(40%); opacity: 0.4; }
 }
+
+/* ---------- 更新日志 ---------- */
+.changelog {
+  padding-top: 4px;
+}
+
+.changelog__item {
+  display: flex;
+  gap: 12px;
+  padding: 12px 2px;
+  border-bottom: 0.5px solid var(--hairline);
+}
+
+.changelog__item:last-child {
+  border-bottom: none;
+}
+
+.changelog__ver {
+  flex: none;
+  width: 48px;
+  padding-top: 2px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.changelog__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.changelog__meta {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.changelog__list {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--text-2);
+}

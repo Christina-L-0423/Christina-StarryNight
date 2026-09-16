@@ -169,10 +169,6 @@ window.SN = window.SN || {};
             <sn-glyph class="row__chev" name="chevron-right" :size="18"></sn-glyph>
           </button>
         </div>
-        <p class="field__hint">
-          聊天通过 OpenAI 兼容接口发送给 AI。还没配置的话，到「设置 → AI 接口」
-          选一个服务商、填好密钥，点「测试连接」就能开聊。
-        </p>
       </div>
 
       <div v-else>
@@ -322,8 +318,6 @@ window.SN = window.SN || {};
           <span class="wallpaper-pick__name">{{ w.name }}</span>
         </button>
       </div>
-      <p class="field__hint">选用浅色壁纸时，文字会自动变成深色，保证看得清。</p>
-
       <p class="section-title">我的壁纸</p>
       <div class="wallpaper-pick">
         <label class="wallpaper-pick__add">
@@ -340,9 +334,6 @@ window.SN = window.SN || {};
         </button>
       </div>
       <p class="field__hint" v-if="status">{{ status }}</p>
-      <p class="field__hint">
-        图片会先压缩再存进你自己的设备浏览器，不会上传到任何服务器；不需要时点右上角的 × 删除。
-      </p>
 
       <p class="section-title">桌面外观</p>
       <div class="list">
@@ -365,10 +356,6 @@ window.SN = window.SN || {};
       <div class="btn-row">
         <button class="btn" type="button" @click="resetWallpaper">恢复默认壁纸</button>
       </div>
-
-      <p class="field__hint">
-        自定义壁纸保存在本地，换浏览器或清除浏览器数据后会丢失；「设置 → 导出备份」可以把它们一起带走。
-      </p>
     `
   };
 
@@ -427,10 +414,6 @@ window.SN = window.SN || {};
       </div>
 
       <div class="empty" v-if="!posts.length">这个分类下还没有帖子。</div>
-
-      <p class="field__hint">
-        论坛现在用的是本地示例数据。真正的发帖、评论需要后端服务器（Stage 3 再做）。
-      </p>
     `
   };
 
@@ -483,11 +466,6 @@ window.SN = window.SN || {};
       </div>
 
       <div class="empty" v-if="!entries.length">这个世界书分类还是空的。</div>
-
-      <p class="field__hint">
-        世界书的作用：以后接入 API 时，小手机会自动挑选相关条目放进提示词，
-        让 AI 记住你的设定。编辑/新增条目会在后续版本加上。
-      </p>
     `
   };
 
@@ -526,11 +504,6 @@ window.SN = window.SN || {};
       <div class="btn-row">
         <button class="btn" type="button" disabled>新建角色卡（后续版本）</button>
       </div>
-
-      <p class="field__hint">
-        点任意角色可以直接跳到「聊天」。角色卡的名字、头像、开场白，
-        都可以在 config.js 的 characters 里改。
-      </p>
     `
   };
 
@@ -577,8 +550,6 @@ window.SN = window.SN || {};
         <span class="field__label">签名</span>
         <input class="input" v-model="user.signature" type="text" />
       </label>
-      <p class="field__hint">改完会自动保存到本机浏览器，刷新页面也不会丢。</p>
-
       <p class="section-title">统计</p>
       <div class="list">
         <div class="row">
@@ -630,13 +601,17 @@ window.SN = window.SN || {};
       const apiStatusOk = ref(false);
 
       function applyPreset(preset) {
-        /* 「自定义」不带地址和模型：不清空已填内容，只给提示 */
-        if (preset.baseUrl) settings.api.baseUrl = preset.baseUrl;
-        if (preset.model) settings.api.model = preset.model;
+        /* 「自定义」= 清空地址从头填（模型名保留，可手动改或重新拉取） */
+        if (preset.id === "custom") {
+          settings.api.baseUrl = "";
+          apiStatusOk.value = false;
+          apiStatus.value = "自定义模式：接口地址已清空，请手动填写任意 OpenAI 兼容接口的地址与模型。";
+          return;
+        }
+        settings.api.baseUrl = preset.baseUrl;
+        settings.api.model = preset.model;
         apiStatusOk.value = false;
-        apiStatus.value = preset.baseUrl
-          ? "已填入「" + preset.name + "」的地址和模型（" + preset.hint + "）。再填入你的 API Key 即可。"
-          : "自定义模式：" + preset.hint + "。";
+        apiStatus.value = "已填入「" + preset.name + "」的地址和模型（" + preset.hint + "）。再填入你的 API Key 即可。";
       }
 
       function testApi() {
@@ -759,9 +734,10 @@ window.SN = window.SN || {};
         askReset: askReset,
         subPage: subPage,
         openSub: openSub,
+        changelog: SN.changelog,
         /* 头部导航上报：子页时标题显示对应名字，返回键回设置主列表 */
         navTitle: computed(function () {
-          const names = { api: "API", weather: "天气与位置", data: "数据管理", about: "关于" };
+          const names = { api: "API", weather: "天气与位置", data: "数据管理", changelog: "更新日志" };
           return names[subPage.value] || "";
         }),
         navIsSub: computed(function () {
@@ -781,7 +757,7 @@ window.SN = window.SN || {};
         <div class="list">
           <button class="row" type="button" @click="openSub('api')">
             <span class="row__main">
-              <span class="row__label">AI 接口</span>
+              <span class="row__label">API</span>
               <span class="row__sub">服务商、密钥、模型与测试连接</span>
             </span>
             <sn-glyph class="row__chev" name="chevron-right" :size="18"></sn-glyph>
@@ -800,14 +776,15 @@ window.SN = window.SN || {};
             </span>
             <sn-glyph class="row__chev" name="chevron-right" :size="18"></sn-glyph>
           </button>
-          <button class="row" type="button" @click="openSub('about')">
+          <button class="row" type="button" @click="openSub('changelog')">
             <span class="row__main">
-              <span class="row__label">关于</span>
-              <span class="row__sub">版本与数据说明</span>
+              <span class="row__label">更新日志</span>
+              <span class="row__sub">新功能与改动记录</span>
             </span>
             <sn-glyph class="row__chev" name="chevron-right" :size="18"></sn-glyph>
           </button>
         </div>
+        <p class="field__hint">版本 {{ version }} · 数据存放在本机浏览器</p>
       </div>
 
       <!-- 子页：AI 接口 -->
@@ -869,9 +846,6 @@ window.SN = window.SN || {};
         <button class="btn" type="button" :disabled="testing" @click="testApi">{{ testing ? "正在测试…" : "测试连接" }}</button>
       </div>
       <p class="field__hint" v-if="apiStatus" :class="apiStatusOk ? 'is-ok' : 'is-bad'">{{ apiStatus }}</p>
-      <p class="field__hint">
-        密钥只保存在你自己的浏览器里；聊天请求从你的设备直达服务商。导出备份会包含密钥，请保管好备份文件。
-      </p>
 
       <!-- 模型选择弹窗：拉取后从底部弹出，按首字母排序 -->
       <div class="modal-mask" v-if="showModels" @click.self="showModels = false">
@@ -951,20 +925,17 @@ window.SN = window.SN || {};
       <p class="field__hint" v-if="status">{{ status }}</p>
       </div>
 
-      <!-- 子页：关于 -->
-      <div v-else-if="subPage === 'about'">
-      <div class="list">
-        <div class="row">
-          <span class="row__main"><span class="row__label">版本</span></span>
-          <span class="row__value">{{ version }}</span>
-        </div>
-        <div class="row">
-          <span class="row__main"><span class="row__label">数据存放位置</span></span>
-          <span class="row__value">本机浏览器</span>
-        </div>
-        <div class="row">
-          <span class="row__main"><span class="row__label">天气数据来源</span></span>
-          <span class="row__value">Open-Meteo</span>
+      <!-- 子页：更新日志 -->
+      <div v-else-if="subPage === 'changelog'">
+      <div class="changelog">
+        <div class="changelog__item" v-for="log in changelog" :key="log.version">
+          <span class="changelog__ver">{{ log.version }}</span>
+          <div class="changelog__body">
+            <p class="changelog__meta">{{ log.date }} · {{ log.title }}</p>
+            <ul class="changelog__list">
+              <li v-for="it in log.items" :key="it">{{ it }}</li>
+            </ul>
+          </div>
         </div>
       </div>
       </div>
