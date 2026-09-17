@@ -272,6 +272,7 @@ window.SN = window.SN || {};
             <span class="row__main">
               <span class="row__label">{{ r.name || "未命名正则" }}</span>
               <span class="row__sub row__sub--wrap">{{ r.pattern || r.find }}</span>
+              <span class="row__sub row__sub--wrap" v-if="r.note">{{ r.note }}</span>
             </span>
             <span class="chip" v-if="r.scope === 'bubble'">气泡</span>
             <sn-switch :model-value="r.enabled !== false" @update:model-value="toggle(r)"></sn-switch>

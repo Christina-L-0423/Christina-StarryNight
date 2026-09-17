@@ -256,7 +256,7 @@ window.SN = window.SN || {};
         <p class="section-title">全部会话</p>
         <div class="list">
           <button class="row" type="button" v-for="c in characters" :key="c.id" @click="openChat(c.id)">
-            <span class="avatar" :style="{ backgroundImage: c.gradient }">{{ c.name.charAt(0) }}</span>
+            <span class="avatar" :style="{ backgroundImage: c.avatar ? 'url(' + c.avatar + ')' : c.gradient }">{{ c.avatar ? "" : c.name.charAt(0) }}</span>
             <span class="row__main">
               <span class="row__label">{{ c.name }}</span>
               <span class="row__sub">{{ lastText(c.id) }}</span>
@@ -437,7 +437,9 @@ window.SN = window.SN || {};
       });
 
       /* ---- 自定义应用图标：给任意应用换成自己的图片 ---- */
-      const allApps = SN.allApps;
+      /* 只有桌面和 Dock 上的应用才出现在「自定义应用图标」列表里
+         （隐藏页如「角色编辑」不算应用，不列出来） */
+      const allApps = SN.apps.concat(SN.dockApps);
       const iconStatus = ref("");
       let iconStatusTimer = null;
 
@@ -837,7 +839,7 @@ window.SN = window.SN || {};
     template: `
       <div class="card-grid">
         <button class="tile" type="button" v-for="c in characters" :key="c.id" @click="editCharacter(c)">
-          <span class="avatar avatar--lg" :style="{ backgroundImage: c.gradient }">{{ c.name.charAt(0) }}</span>
+          <span class="avatar avatar--lg" :style="{ backgroundImage: c.avatar ? 'url(' + c.avatar + ')' : c.gradient }">{{ c.avatar ? "" : c.name.charAt(0) }}</span>
           <span class="tile__name">{{ c.name }}</span>
           <span class="tile__desc" v-if="c.locked">官方设定 · 只能查看</span>
         </button>
@@ -928,6 +930,30 @@ window.SN = window.SN || {};
           });
       }
 
+      /* 头像图片：压缩到 192px 存在角色数据里，随备份一起走 */
+      function pickAvatar(event) {
+        if (locked.value || !character.value) return;
+        const input = event && event.target;
+        const file = input && input.files && input.files[0];
+        if (!file) return;
+        SN.mediaStore
+          .processImageFile(file, 192)
+          .then(function (dataUrl) {
+            character.value.avatar = dataUrl;
+            if (store.persistNow) store.persistNow();
+          })
+          .catch(function (err) {
+            console.warn("[StarryNight] 头像处理失败：", err);
+          });
+        if (input) input.value = "";
+      }
+
+      function removeAvatar() {
+        if (locked.value || !character.value) return;
+        character.value.avatar = "";
+        if (store.persistNow) store.persistNow();
+      }
+
       return {
         character: character,
         locked: locked,
@@ -935,6 +961,8 @@ window.SN = window.SN || {};
         setGradient: setGradient,
         resetChat: resetChat,
         removeCharacter: removeCharacter,
+        pickAvatar: pickAvatar,
+        removeAvatar: removeAvatar,
         /* 页头：标题显示角色名，返回键回到「角色集」 */
         navTitle: computed(function () {
           return character.value ? character.value.name : "角色编辑";
@@ -951,8 +979,8 @@ window.SN = window.SN || {};
 
       <div v-else>
         <div class="card profile">
-          <span class="avatar avatar--lg" :style="{ backgroundImage: character.gradient }">
-            {{ character.name.charAt(0) }}
+          <span class="avatar avatar--lg" :style="{ backgroundImage: character.avatar ? 'url(' + character.avatar + ')' : character.gradient }">
+            {{ character.avatar ? "" : character.name.charAt(0) }}
           </span>
           <p class="profile__name">{{ character.name }}</p>
           <p class="profile__sign">{{ locked ? "官方设定 · 不可修改" : "自定义角色" }}</p>
@@ -964,6 +992,18 @@ window.SN = window.SN || {};
             :class="{ 'is-active': character.gradient === g, 'is-locked': locked }"
             :style="{ backgroundImage: g }" @click="setGradient(g)"></button>
         </div>
+
+        <template v-if="!locked">
+          <p class="section-title">头像图片</p>
+          <div class="btn-row">
+            <label class="mini-btn">
+              {{ character.avatar ? "换一张图片" : "选择图片" }}
+              <input type="file" accept="image/*" hidden @change="pickAvatar($event)" />
+            </label>
+            <button class="mini-btn mini-btn--plain" type="button" v-if="character.avatar" @click="removeAvatar">移除图片</button>
+          </div>
+          <p class="field__hint">会自动压缩后存在本机，并随备份文件一起导出；移除图片就回到上面的配色头像。</p>
+        </template>
 
         <p class="section-title">角色设定</p>
         <label class="field">

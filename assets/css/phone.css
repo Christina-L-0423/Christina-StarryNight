@@ -361,3 +361,157 @@
     opacity: 1;
   }
 }
+
+/* ---------- 桌面编辑模式：长按图标进入（抖动 + 拖动 + 多页） ---------- */
+.home__pager {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.home__cell {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-radius: 18px;
+}
+
+/* 拖动时落点格子的虚线高亮 */
+.home__cell.is-hover {
+  outline: 1.5px dashed rgba(255, 255, 255, 0.65);
+  outline-offset: 3px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* 被抓起的图标原位置变淡 */
+.home__cell.is-source {
+  opacity: 0.35;
+}
+
+.home__pager.is-editing .home__cell {
+  touch-action: none;
+}
+
+/* 图标抖动：错开相位更像 iOS */
+@keyframes app-jiggle {
+  0% {
+    transform: rotate(-1.8deg) translateY(0.5px);
+  }
+  50% {
+    transform: rotate(1.8deg) translateY(-0.5px);
+  }
+  100% {
+    transform: rotate(-1.8deg) translateY(0.5px);
+  }
+}
+
+.home__pager.is-editing .app-icon {
+  animation: app-jiggle 0.3s ease-in-out infinite;
+}
+
+.home__pager.is-editing .home__cell:nth-child(3n) .app-icon {
+  animation-delay: 0.1s;
+}
+
+.home__pager.is-editing .home__cell:nth-child(3n + 1) .app-icon {
+  animation-delay: 0.2s;
+}
+
+/* 「新页面」虚线块（编辑模式下出现在最后一页末尾） */
+.home__cell--new {
+  cursor: pointer;
+  gap: 7px;
+}
+
+.home__newbox {
+  width: 60px;
+  height: 60px;
+  border-radius: 17px;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  color: rgba(255, 255, 255, 0.85);
+  border: 1.5px dashed rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.home__newlabel {
+  font-size: 11.5px;
+  color: var(--text-1);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+/* 页点与编辑条 */
+.home__dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 18px;
+}
+
+.home__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 0;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.38);
+}
+
+.home__dot.is-active {
+  background: #fff;
+}
+
+.home__dot--add {
+  width: auto;
+  height: auto;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 11px;
+  border: 1px dashed rgba(255, 255, 255, 0.5);
+}
+
+.home__editbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.home__edithint {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.8);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.home__done {
+  padding: 5px 16px;
+  border-radius: 15px;
+  font-size: 12.5px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.22);
+  border: 0.5px solid rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* 拖动中的幽灵图标：跟随手指，本身不接收事件 */
+.home__ghost {
+  position: fixed;
+  z-index: 60;
+  width: 60px;
+  pointer-events: none;
+  transform: scale(1.08);
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.35));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home__pager.is-editing .app-icon {
+    animation: none;
+  }
+}

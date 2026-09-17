@@ -187,6 +187,9 @@ window.SN = window.SN || {};
     useLiveWeather: true,
     /* 外观 */
     wallpaper: "starry",
+    /* 桌面分页布局（数组的数组，元素是 app id）；空 = 默认单页顺序。
+       在桌面上长按图标进入编辑模式可拖动调整，跟随设置进备份 */
+    homeLayout: [],
     /* Dock 栏（底部）是否显示应用名称 */
     dockLabels: true,
     /* 桌面（主屏）是否显示应用名称 */
