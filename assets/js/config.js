@@ -252,7 +252,7 @@ window.SN = window.SN || {};
       id: "deepseek",
       name: "DeepSeek",
       baseUrl: "https://api.deepseek.com/v1",
-      model: "deepseek-chat",
+      model: "deepseek-flash",
       hint: "platform.deepseek.com 注册并创建 Key，价格便宜"
     },
     {
@@ -296,6 +296,16 @@ window.SN = window.SN || {};
      5.6) 更新日志（设置 → 更新日志 展示，新的在上面）
      ------------------------------------------------------------ */
   SN.changelog = [
+    {
+      version: "v0.0.5",
+      date: "2026-09-17",
+      title: "修复测试连接判定",
+      items: [
+        "测试连接判定改为检查服务商返回的实际回复内容，避免空回复误判为成功",
+        "防止成功时显示失败、失败时显示成功的反向判定问题",
+        "DeepSeek 预设模型更新为 deepseek-flash（当前可用模型）"
+      ]
+    },
     {
       version: "v0.0.4",
       date: "2026-09-16",

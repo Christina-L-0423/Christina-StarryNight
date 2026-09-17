@@ -246,7 +246,11 @@ window.SN = window.SN || {};
       return Promise.resolve({ ok: false, message: "请先填写 API Key（本地 Ollama 可以不填）。" });
     }
     return chat({ messages: [{ role: "user", content: "请只回复两个字：成功" }], noStream: true, maxTokens: 16 })
-      .then(function (text) {
+      .then(function (raw) {
+        const text = String(raw || "").trim();
+        if (!text) {
+          return { ok: false, message: "服务商返回为空，模型可能不可用或不支持此请求。" };
+        }
         return { ok: true, reply: text };
       })
       .catch(function (err) {
