@@ -125,7 +125,14 @@ window.SN = window.SN || {};
             }
           })
           .then(function (full) {
-            if (!bubble.text) bubble.text = full || "…";
+            const finalText = bubble.text || full || "…";
+            /* 逻辑层管线收尾：跑正则 → 按 ||| 分气泡（第一条写进占位气泡，其余追加落库） */
+            const bubbles =
+              SN.logic && SN.logic.processReply ? SN.logic.processReply(finalText) : [finalText];
+            bubble.text = bubbles.length ? bubbles[0] : "…";
+            bubbles.slice(1).forEach(function (piece) {
+              store.pushMessage(targetId, "them", piece);
+            });
             sending.value = false;
             scrollToBottom();
           })
@@ -1085,7 +1092,7 @@ window.SN = window.SN || {};
         changelog: SN.changelog,
         /* 头部导航上报：子页时标题显示对应名字，返回键回设置主列表 */
         navTitle: computed(function () {
-          const names = { api: "API", weather: "天气与位置", data: "数据管理", changelog: "更新日志" };
+          const names = { api: "API", presets: "提示词预设", regex: "正则", memory: "记忆库", weather: "天气与位置", data: "数据管理", changelog: "更新日志" };
           return names[subPage.value] || "";
         }),
         navIsSub: computed(function () {
@@ -1106,6 +1113,24 @@ window.SN = window.SN || {};
           <button class="row" type="button" @click="openSub('api')">
             <span class="row__main">
               <span class="row__label">API</span>
+            </span>
+            <sn-glyph class="row__chev" name="chevron-right" :size="18"></sn-glyph>
+          </button>
+          <button class="row" type="button" @click="openSub('presets')">
+            <span class="row__main">
+              <span class="row__label">提示词预设</span>
+            </span>
+            <sn-glyph class="row__chev" name="chevron-right" :size="18"></sn-glyph>
+          </button>
+          <button class="row" type="button" @click="openSub('regex')">
+            <span class="row__main">
+              <span class="row__label">正则</span>
+            </span>
+            <sn-glyph class="row__chev" name="chevron-right" :size="18"></sn-glyph>
+          </button>
+          <button class="row" type="button" @click="openSub('memory')">
+            <span class="row__main">
+              <span class="row__label">记忆库</span>
             </span>
             <sn-glyph class="row__chev" name="chevron-right" :size="18"></sn-glyph>
           </button>
@@ -1203,6 +1228,21 @@ window.SN = window.SN || {};
           <div class="modal__foot">共 {{ models.length }} 个模型 · 按首字母排序</div>
         </div>
       </div>
+      </div>
+
+      <!-- 子页：提示词预设 -->
+      <div v-else-if="subPage === 'presets'">
+        <sn-preset-manage-view></sn-preset-manage-view>
+      </div>
+
+      <!-- 子页：正则 -->
+      <div v-else-if="subPage === 'regex'">
+        <sn-regex-manage-view></sn-regex-manage-view>
+      </div>
+
+      <!-- 子页：记忆库 -->
+      <div v-else-if="subPage === 'memory'">
+        <sn-memory-manage-view></sn-memory-manage-view>
       </div>
 
       <!-- 子页：天气与位置 -->

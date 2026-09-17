@@ -64,14 +64,23 @@
   <!-- Vue 3（完整版，自带模板编译，所以不需要打包工具） -->
   <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
 
-  <!-- 下面这些顺序不能随意调换：先配置 → 再状态 → 再组件 → 最后启动 -->
+  <!-- 下面这些顺序不能随意调换：
+       配置 → 数据层（默认值 → 状态 → 图片库）→ 逻辑层（天气 → 提示词 → 记忆 → 接口）→ 界面层 → 启动 -->
   <script src="./assets/js/config.js"></script>
-  <script src="./assets/js/store.js"></script>
-  <script src="./assets/js/weather.js"></script>
-  <script src="./assets/js/mediaStore.js"></script>
-  <script src="./assets/js/api.js"></script>
-  <script src="./assets/js/components.js"></script>
-  <script src="./assets/js/views.js"></script>
+
+  <script src="./assets/js/data/defaults.js"></script>
+  <script src="./assets/js/data/store.js"></script>
+  <script src="./assets/js/data/mediaStore.js"></script>
+
+  <script src="./assets/js/logic/weather.js"></script>
+  <script src="./assets/js/logic/prompt.js"></script>
+  <script src="./assets/js/logic/memory.js"></script>
+  <script src="./assets/js/logic/apiClient.js"></script>
+
+  <script src="./assets/js/ui/components.js"></script>
+  <script src="./assets/js/ui/views.js"></script>
+  <script src="./assets/js/ui/manageViews.js"></script>
+
   <script src="./assets/js/app.js"></script>
 </body>
 </html>

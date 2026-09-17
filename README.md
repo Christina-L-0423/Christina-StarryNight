@@ -59,18 +59,24 @@ assets/
     phone.css             ← 手机外壳、状态栏、灵动岛、壁纸、图标、Dock
     apps.css              ← 应用内部的样式（卡片、列表、气泡、输入框…）
   js/
-    config.js             ← 【最常改】应用清单、图标、壁纸、示例角色、默认设置
-    store.js              ← 全局状态 + 本地存储 + 打开/关闭应用 + 备份导出导入
-    weather.js            ← 时间与天气（Open-Meteo 免费接口，失败自动降级）
-    mediaStore.js         ← 自定义壁纸的图片库（IndexedDB）+ 图片压缩
-    api.js                ← AI 对话客户端（OpenAI 兼容：组装提示词 / 流式解析 / 报错人话）
-
-    components.js         ← 界面组件（状态栏、小组件、图标、Dock、应用面板）
-    views.js              ← 应用页面：聊天 / 美化 / 论坛 / 世界书 / 角色集 / 角色编辑 / 用户 / 设置
+    config.js             ← 【最常改】应用清单、图标、壁纸、版本号与更新日志
+    data/                 ← 【数据层】「存什么」：六张表 + 本地存储
+      defaults.js         ← 六张表的出厂默认值：角色 / 世界书 / 预设 / 正则 / 聊天 / 记忆库
+      store.js            ← 全局状态 + localStorage + 打开/关闭应用 + 备份导出导入
+      mediaStore.js       ← 自定义壁纸的图片库（IndexedDB）+ 图片压缩
+    logic/                ← 【逻辑层】「怎么算」：命中匹配、拼提示词、处理回复
+      weather.js          ← 时间与天气（Open-Meteo 免费接口，失败自动降级）
+      prompt.js           ← 提示词管线：预设→角色→世界书→记忆库→上下文；回复跑正则、按 ||| 分气泡
+      memory.js           ← 记忆库/世界书的「命中判断」+ 记忆增删改查
+      apiClient.js        ← AI 对话客户端（OpenAI 兼容：组装消息 / 流式解析 / 报错人话）
+    ui/                   ← 【界面层】「长什么样」+【设置层】「让用户改什么」
+      components.js       ← 界面组件（状态栏、小组件、图标、Dock、应用面板）
+      views.js            ← 应用页面：聊天 / 美化 / 论坛 / 世界书 / 角色集 / 角色编辑 / 用户 / 设置
+      manageViews.js      ← 设置里的三个管理页：提示词预设 / 正则 / 记忆库
     app.js                ← 启动文件：先打开图片库，再把组件注册进去并挂载
 ```
 
-**加载顺序不能改**：`config → store → weather → mediaStore → api → components → views → app`。
+**加载顺序不能改**：`config → data/defaults → data/store → data/mediaStore → logic/weather → logic/prompt → logic/memory → logic/apiClient → ui/components → ui/views → ui/manageViews → app`。
 
 ---
 
@@ -92,7 +98,7 @@ assets/
 | 角色集 | ✅ 角色卡列表，点击 **进入该角色的编辑页**（不再直接跳聊天） |
 | 角色编辑 | ✅ 查看/修改名字、人设、开场白、头像配色；可重置该角色的聊天。**官方角色（Christina）只能看、不能改** |
 | 用户 | ✅ 改昵称/签名，本地自动保存 |
-| 设置 | ✅ AI 接口（服务商预设/密钥/模型/温度/长度/历史条数/流式开关/**测试连接**）、天气位置、导出/导入备份、恢复出厂 |
+| 设置 | ✅ AI 接口（服务商预设/密钥/模型/温度/长度/历史条数/流式开关/**测试连接**）、**提示词预设**、**正则**、**记忆库**、天气位置、导出/导入备份、恢复出厂 |
 | 数据保存在哪里 | 设置/聊天在 localStorage；自定义壁纸图片在 IndexedDB（都在本机浏览器里） |
 
 ### 自定义壁纸：怎么用、存在哪里

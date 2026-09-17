@@ -32,12 +32,27 @@
     return;
   }
 
-  /* 2) 我们自己写的脚本有没有全部加载成功？ */
-  if (!window.SN || !window.SN.store || !window.SN.components || !window.SN.mediaStore || !window.SN.api) {
+  /* 2) 我们自己写的脚本有没有全部加载成功？
+        四层结构：数据层 data/ → 逻辑层 logic/ → 界面层 ui/ → 启动 app.js */
+  const REQUIRED = [
+    ["SN.store", window.SN && window.SN.store, "data/store.js（数据层：状态与本地存储）"],
+    ["SN.defaults", window.SN && window.SN.defaults, "data/defaults.js（数据层：出厂默认值）"],
+    ["SN.mediaStore", window.SN && window.SN.mediaStore, "data/mediaStore.js（数据层：图片库）"],
+    ["SN.prompt", window.SN && window.SN.prompt, "logic/prompt.js（逻辑层：拼提示词 / 正则 / 分气泡）"],
+    ["SN.memory", window.SN && window.SN.memory, "logic/memory.js（逻辑层：记忆库）"],
+    ["SN.api", window.SN && window.SN.api, "logic/apiClient.js（逻辑层：调 API）"],
+    ["SN.components", window.SN && window.SN.components, "ui/components.js（界面层：组件）"]
+  ];
+  if (!window.SN || !window.SN.VERSION || !window.SN.components || !window.SN.views) {
+    const missing = REQUIRED.filter(function (row) {
+      return !row[1];
+    }).map(function (row) {
+      return row[2];
+    });
     showError(
       "脚本没能完整加载",
-      "请确认 assets/js 目录下 config.js / store.js / weather.js / mediaStore.js / api.js / components.js / views.js 都在，" +
-        "并且 index.html 底部的引入顺序没有被改动。"
+      "请确认 assets/js 下的四层文件都在，并且 index.html 底部的引入顺序没有被改动。" +
+        (missing.length ? "缺失：" + missing.join("、") : "")
     );
     return;
   }

@@ -122,6 +122,12 @@ window.SN = window.SN || {};
     worldbook: saved.worldbook || clone(SN.defaults.worldbook),
     forumPosts: saved.forumPosts || clone(SN.defaults.forumPosts),
     chats: saved.chats || clone(SN.defaults.chats),
+    /* 逻辑层三张表：系统提示词/预设、正则、记忆库 */
+    presets: Array.isArray(saved.presets) ? saved.presets : clone((SN.defaults && SN.defaults.presets) || []),
+    regexes: Array.isArray(saved.regexes) ? saved.regexes : clone((SN.defaults && SN.defaults.regexes) || []),
+    memoryBank: Array.isArray(saved.memoryBank) ? saved.memoryBank : clone((SN.defaults && SN.defaults.memoryBank) || []),
+    /* 当前使用的预设 id（逻辑层 prompt.js 优先用它挑预设） */
+    activePresetId: saved.activePresetId || (SN.defaults && SN.defaults.activePresetId) || "",
     /* 自定义壁纸列表（只存 id 和名字；图片本体在 mediaStore 的图片库里） */
     customWallpapers: Array.isArray(saved.customWallpapers) ? saved.customWallpapers : []
   });
@@ -334,6 +340,10 @@ window.SN = window.SN || {};
     if (Array.isArray(payload.worldbook)) state.worldbook = payload.worldbook;
     if (Array.isArray(payload.forumPosts)) state.forumPosts = payload.forumPosts;
     if (payload.chats) state.chats = payload.chats;
+    if (Array.isArray(payload.presets)) state.presets = payload.presets;
+    if (Array.isArray(payload.regexes)) state.regexes = payload.regexes;
+    if (Array.isArray(payload.memoryBank)) state.memoryBank = payload.memoryBank;
+    if (typeof payload.activePresetId === "string") state.activePresetId = payload.activePresetId;
 
     /* 恢复自定义壁纸：列表 + 把图片写回本机图片库 */
     const imageMap = {};
@@ -397,6 +407,10 @@ window.SN = window.SN || {};
     state.worldbook = clone(SN.defaults.worldbook);
     state.forumPosts = clone(SN.defaults.forumPosts);
     state.chats = clone(SN.defaults.chats);
+    state.presets = clone((SN.defaults && SN.defaults.presets) || []);
+    state.regexes = clone((SN.defaults && SN.defaults.regexes) || []);
+    state.memoryBank = clone((SN.defaults && SN.defaults.memoryBank) || []);
+    state.activePresetId = (SN.defaults && SN.defaults.activePresetId) || "";
     state.customWallpapers = [];
     if (SN.mediaStore && SN.mediaStore.clear) SN.mediaStore.clear();
     state.activeApp = null;

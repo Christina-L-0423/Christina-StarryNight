@@ -84,13 +84,23 @@ window.SN = window.SN || {};
     const lines = [];
 
     lines.push("你在一个「AI 陪伴小手机」应用里扮演角色「" + char.name + "」，和用户持续聊天。");
-    lines.push("角色设定：" + (char.persona || "一个温柔、真诚的聊天伙伴。"));
+    /* 四层架构：预设（系统提示词）/ 角色设定 / 命中记忆 由逻辑层统一拼装（logic/prompt.js） */
+    if (SN.logic && SN.logic.systemSections) {
+      SN.logic.systemSections(char, char && char.id).forEach(function (section) {
+        lines.push(section);
+      });
+    } else {
+      lines.push("角色设定：" + (char.persona || "一个温柔、真诚的聊天伙伴。"));
+    }
     if (char.greeting) {
       lines.push("你的开场白是「" + char.greeting + "」，仅供了解语气，不要重复念出来。");
     }
-    if (state.worldbook && state.worldbook.length) {
+    const bookHits = SN.logic.matchWorldbook
+      ? SN.logic.matchWorldbook(characterId)
+      : state.worldbook || [];
+    if (bookHits.length) {
       lines.push("以下是世界书设定，聊天时请遵守：");
-      state.worldbook.forEach(function (item) {
+      bookHits.forEach(function (item) {
         lines.push("【" + item.title + "】" + item.content);
       });
     }
