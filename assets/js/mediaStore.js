@@ -216,9 +216,10 @@ window.SN = window.SN || {};
   /* ------------------------------------------------------------
      把用户选的图片文件压成 dataURL：
      最长边超过 1600px 就等比缩小，统一转成 JPEG。
+     maxEdge 可选：想把图压得更小（例如应用图标压到 256px）就传进来。
      （透明 PNG 会先垫一层深色底，避免转 JPEG 后变黑块）
      ------------------------------------------------------------ */
-  mediaStore.processImageFile = function (file) {
+  mediaStore.processImageFile = function (file, maxEdge) {
     return new Promise(function (resolve, reject) {
       if (!file || String(file.type || "").indexOf("image/") !== 0) {
         reject(new Error("请选择图片文件"));
@@ -237,7 +238,8 @@ window.SN = window.SN || {};
           try {
             const width = img.naturalWidth || img.width || 1;
             const height = img.naturalHeight || img.height || 1;
-            const scale = Math.min(1, MAX_EDGE / Math.max(width, height));
+            const edge = Number(maxEdge) > 0 ? Number(maxEdge) : MAX_EDGE;
+            const scale = Math.min(1, edge / Math.max(width, height));
             const wpx = Math.max(1, Math.round(width * scale));
             const hpx = Math.max(1, Math.round(height * scale));
             const canvas = document.createElement("canvas");

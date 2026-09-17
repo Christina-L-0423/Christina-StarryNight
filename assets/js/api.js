@@ -84,7 +84,7 @@ window.SN = window.SN || {};
     const lines = [];
 
     lines.push("你在一个「AI 陪伴小手机」应用里扮演角色「" + char.name + "」，和用户持续聊天。");
-    lines.push("角色设定：" + (char.persona || char.tagline || "一个温柔、真诚的聊天伙伴。"));
+    lines.push("角色设定：" + (char.persona || "一个温柔、真诚的聊天伙伴。"));
     if (char.greeting) {
       lines.push("你的开场白是「" + char.greeting + "」，仅供了解语气，不要重复念出来。");
     }

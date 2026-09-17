@@ -124,15 +124,26 @@ window.SN = window.SN || {};
     },
     emits: ["open"],
     computed: {
-      /* 这里只负责“大小和圆角”。
+      /* 用户自定义的图标图片（「美化 → 自定义应用图标」设置）；没有就返回空串 */
+      customIcon: function () {
+        const icons = SN.store.state.settings.appIcons || {};
+        return icons[this.app.id] || "";
+      },
+      /* 这里只负责“大小、圆角、自定义图片”。
          玻璃的样子（无色薄膜、细亮边、模糊）全部写在 phone.css 里，
-         所以所有图标长得一模一样，不做任何单独配色。 */
+         所以所有默认图标长得一模一样，不做任何单独配色。 */
       boxStyle: function () {
-        return {
+        const style = {
           width: this.size + "px",
           height: this.size + "px",
           borderRadius: Math.round(this.size * 0.28) + "px"
         };
+        if (this.customIcon) {
+          style.backgroundImage = 'url("' + this.customIcon + '")';
+          style.backgroundSize = "cover";
+          style.backgroundPosition = "center";
+        }
+        return style;
       },
       glyphSize: function () {
         return Math.round(this.size * 0.52);
@@ -140,8 +151,8 @@ window.SN = window.SN || {};
     },
     template:
       '<button class="app-icon" type="button" @click="$emit(\'open\', app)">' +
-      '<span class="app-icon__box" :style="boxStyle">' +
-      '<sn-glyph :name="app.icon" :size="glyphSize"></sn-glyph>' +
+      '<span class="app-icon__box" :class="{ \'is-custom\': !!customIcon }" :style="boxStyle">' +
+      '<sn-glyph v-if="!customIcon" :name="app.icon" :size="glyphSize"></sn-glyph>' +
       "</span>" +
       '<span class="app-icon__label" v-if="showLabel">{{ app.name }}</span>' +
       "</button>"
@@ -169,18 +180,22 @@ window.SN = window.SN || {};
   SN.components["sn-home"] = {
     name: "sn-home",
     setup: function () {
+      const store = SN.store;
       return {
         apps: SN.apps,
-        openApp: SN.store.openApp
+        openApp: store.openApp,
+        /* 桌面主屏是否显示应用名称（在「美化 → 应用名称显示」里开关） */
+        showLabel: Vue.computed(function () {
+          return store.state.settings.homeLabels;
+        })
       };
     },
     template:
       '<div class="home">' +
       "<sn-widget></sn-widget>" +
       '<div class="home__grid">' +
-      '<sn-app-icon v-for="app in apps" :key="app.id" :app="app" @open="openApp"></sn-app-icon>' +
+      '<sn-app-icon v-for="app in apps" :key="app.id" :app="app" :show-label="showLabel" @open="openApp"></sn-app-icon>' +
       "</div>" +
-      '<p class="home__hint">点图标进入应用 · 所有设置都在底部 Dock 的「设置」里</p>' +
       "</div>"
   };
 
@@ -226,7 +241,7 @@ window.SN = window.SN || {};
     },
     computed: {
       meta: function () {
-        return SN.findApp(this.appId) || { id: this.appId, name: "应用", intro: "" };
+        return SN.findApp(this.appId) || { id: this.appId, name: "应用" };
       },
       viewName: function () {
         return SN.views[this.appId] || "";
@@ -263,10 +278,9 @@ window.SN = window.SN || {};
       /* 左上角是连在一起的一整块：[箭头 + 大标题]，整块可点返回。
          没有第二个文字标签，也没有磨砂底 —— 箭头就是唯一的“退出”标记。 */
       '<button class="back-btn" type="button" :aria-label="backAriaLabel" @click="onBack">' +
-      '<sn-glyph class="back-btn__arrow" name="chevron-left" :size="26"></sn-glyph>' +
+      '<sn-glyph class="back-btn__arrow" name="chevron-left" :size="20"></sn-glyph>' +
       '<span class="app-header__title">{{ title }}</span>' +
       "</button>" +
-      '<p class="app-header__sub" v-if="!navIsSub">{{ meta.intro }}</p>' +
       "</header>" +
       '<div class="app-body">' +
       '<component :is="viewName" :app="meta" ref="viewRef"></component>' +

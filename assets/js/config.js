@@ -8,7 +8,7 @@ window.SN = window.SN || {};
 (function (SN) {
   "use strict";
 
-  SN.VERSION = "0.0.6";
+  SN.VERSION = "0.0.7";
   SN.APP_NAME = "StarryNight";
 
   /* ------------------------------------------------------------
@@ -22,20 +22,17 @@ window.SN = window.SN || {};
     {
       id: "chat",
       name: "聊天",
-      icon: "chat",
-      intro: "和你的角色聊天，接入 API 后即可真实对话"
+      icon: "chat"
     },
     {
       id: "beautify",
       name: "美化",
-      icon: "paint",
-      intro: "自定义壁纸与图标外观"
+      icon: "paint"
     },
     {
       id: "forum",
       name: "论坛",
-      icon: "topic",
-      intro: "逛帖子、发话题、看大家的角色"
+      icon: "topic"
     }
   ];
 
@@ -46,31 +43,35 @@ window.SN = window.SN || {};
     {
       id: "worldbook",
       name: "世界书",
-      icon: "book",
-      intro: "给 AI 的设定资料库，聊天时会自动参考"
+      icon: "book"
     },
     {
       id: "characters",
       name: "角色集",
-      icon: "users",
-      intro: "管理你的角色卡"
+      icon: "users"
     },
     {
       id: "profile",
       name: "用户",
-      icon: "user",
-      intro: "你的个人主页"
+      icon: "user"
     },
     {
       id: "settings",
       name: "设置",
-      icon: "sliders",
-      intro: "API 配置、数据备份与导出"
+      icon: "sliders"
     }
   ];
 
-  /* 全部应用的合集，方便按 id 查找 */
-  SN.allApps = SN.apps.concat(SN.dockApps);
+  /* 全部应用的合集，方便按 id 查找（含不在桌面/Dock 上露面的隐藏页面） */
+  SN.hiddenApps = [
+    {
+      id: "characterEdit",
+      name: "角色编辑",
+      icon: "users"
+    }
+  ];
+
+  SN.allApps = SN.apps.concat(SN.dockApps, SN.hiddenApps);
 
   SN.findApp = function (id) {
     for (var i = 0; i < SN.allApps.length; i += 1) {
@@ -239,6 +240,7 @@ window.SN = window.SN || {};
     forum: "sn-forum-view",
     worldbook: "sn-worldbook-view",
     characters: "sn-characters-view",
+    characterEdit: "sn-character-edit-view",
     profile: "sn-profile-view",
     settings: "sn-settings-view"
   };
@@ -296,6 +298,20 @@ window.SN = window.SN || {};
      5.6) 更新日志（设置 → 更新日志 展示，新的在上面）
      ------------------------------------------------------------ */
   SN.changelog = [
+    {
+      version: "v0.0.7",
+      date: "2026-09-17",
+      title: "角色编辑、自定义图标、页头微调",
+      items: [
+        "页头箭头缩小到 20px，并与大标题同色（不再单独用强调蓝）",
+        "美化新增「自定义应用图标」：给任意应用换成自己的图片（桌面和 Dock 同时生效，可一键恢复默认）",
+        "美化新增「应用名称显示」开关（桌面主屏名称开关，就放在 Dock 开关下面）",
+        "删掉界面上的提示小字：首页提示、预览舞台提示、页头小字介绍、美化与接口页的操作说明",
+        "角色集点角色卡不再直接进聊天，改为进入该角色的编辑页（可查看设定）",
+        "删掉全部角色「简介」",
+        "默认角色改名 Christina，设定锁定：能看、不能改，每次打开都用官方设定同步（不受本地存储与备份导入影响）"
+      ]
+    },
     {
       version: "v0.0.6",
       date: "2026-09-17",
@@ -385,7 +401,12 @@ window.SN = window.SN || {};
       useLiveWeather: true,
       /* 外观 */
       wallpaper: "starry",
+      /* Dock 栏（底部）是否显示应用名称 */
       dockLabels: true,
+      /* 桌面（主屏）是否显示应用名称 */
+      homeLabels: true,
+      /* 自定义应用图标：app id → 图片 dataURL（在「美化 → 自定义应用图标」里设置） */
+      appIcons: {},
       /* 状态栏电量（目前是装饰值） */
       battery: 76
     },
@@ -396,14 +417,16 @@ window.SN = window.SN || {};
       gradient: "linear-gradient(150deg, #7e8cff, #d174ff)"
     },
 
-    /* 示例角色卡 */
+    /* 默认角色卡。
+       locked: true 的角色是「官方设定」：改名、人设、开场白都由这个文件统一维护，
+       用户只能查看、不能修改；每次打开页面都会用它覆盖本地存储里的旧版本。 */
     characters: [
       {
         id: "christina",
-        name: "克里斯蒂娜",
-        tagline: "陪你熬夜看星星的人",
+        name: "Christina",
+        locked: true,
         persona:
-          "克里斯蒂娜，二十多岁，喜欢熬夜看星星，是用户的老朋友。说话温柔简短，偶尔关心一句，偶尔小小地调侃一下。",
+          "Christina，二十多岁，喜欢熬夜看星星，是用户的老朋友。说话温柔简短，偶尔关心一句，偶尔小小地调侃一下。",
         gradient: "linear-gradient(150deg, #8ea2ff, #c86bff)",
         greeting: "又见面啦。今晚的星星很好看，想聊点什么？"
       }

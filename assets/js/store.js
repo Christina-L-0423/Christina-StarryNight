@@ -50,17 +50,30 @@ window.SN = window.SN || {};
       changed = true;
     }
     if (!flags.keepOnlyChristina) {
+      /* 老版本的示例角色（星野零零 / 夜航星）不再需要，清掉；
+         用户自己加的角色不动，否则导入备份后会被误删。 */
+      const SAMPLE_CHARACTER_IDS = ["xingye", "yohang"];
       if (Array.isArray(saved.characters)) {
         saved.characters = saved.characters.filter(function (c) {
-          return c && c.id === "christina";
+          return c && SAMPLE_CHARACTER_IDS.indexOf(c.id) === -1;
         });
       }
       if (saved.chats && typeof saved.chats === "object") {
-        Object.keys(saved.chats).forEach(function (key) {
-          if (key !== "christina") delete saved.chats[key];
+        SAMPLE_CHARACTER_IDS.forEach(function (id) {
+          delete saved.chats[id];
         });
       }
       flags.keepOnlyChristina = true;
+      changed = true;
+    }
+    if (!flags.stripCharacterTagline) {
+      /* 角色「简介」字段已废弃：老数据里的一起删掉 */
+      if (Array.isArray(saved.characters)) {
+        saved.characters.forEach(function (c) {
+          if (c) delete c.tagline;
+        });
+      }
+      flags.stripCharacterTagline = true;
       changed = true;
     }
     if (changed) {
@@ -79,13 +92,33 @@ window.SN = window.SN || {};
     return merged;
   }
 
+  /* ---------- 锁定角色（官方默认角色）的强制同步 ----------
+     config.js 里标记了 locked: true 的角色属于「官方设定」：
+     1) 每次打开页面都用文件里的最新设定覆盖本地存储里的旧版本（用户改了刷新就还原）
+     2) 导入备份时也不会被备份里的旧设定覆盖
+     用户自己添加的角色不受影响，按原顺序保留在后面。 */
+  function withLockedCharacters(list) {
+    const locked = SN.defaults.characters.filter(function (c) {
+      return c && c.locked;
+    });
+    const lockedIds = locked.map(function (c) {
+      return c.id;
+    });
+    const keep = (Array.isArray(list) ? list : []).filter(function (c) {
+      return c && c.id && lockedIds.indexOf(c.id) === -1;
+    });
+    return locked.map(clone).concat(keep);
+  }
+
   /* ---------- 全局状态 ---------- */
   const state = reactive({
     /** 当前打开的应用 id；null 表示正在看桌面 */
     activeApp: null,
+    /** 打开应用时附带的小参数（例如角色编辑页的 { characterId }） */
+    appParams: {},
     settings: mergeSettings(saved.settings),
     user: Object.assign(clone(SN.defaults.user), saved.user || {}),
-    characters: saved.characters || clone(SN.defaults.characters),
+    characters: withLockedCharacters(saved.characters),
     worldbook: saved.worldbook || clone(SN.defaults.worldbook),
     forumPosts: saved.forumPosts || clone(SN.defaults.forumPosts),
     chats: saved.chats || clone(SN.defaults.chats),
@@ -197,14 +230,17 @@ window.SN = window.SN || {};
   );
 
   /* ---------- 打开 / 关闭应用 ---------- */
-  /* 传 id 字符串或应用对象都可以，这里统一成 id */
-  function openApp(target) {
+  /* 传 id 字符串或应用对象都可以，这里统一成 id。
+     params 可选：给页面传一点进入时需要的参数，例如角色编辑页的 { characterId } */
+  function openApp(target, params) {
     if (!target) return;
     state.activeApp = typeof target === "string" ? target : target.id;
+    state.appParams = params && typeof params === "object" ? Object.assign({}, params) : {};
   }
 
   function closeApp() {
     state.activeApp = null;
+    state.appParams = {};
   }
 
   /* ---------- 聊天小工具 ---------- */
@@ -294,7 +330,7 @@ window.SN = window.SN || {};
       state.settings = mergeSettings(payload.settings);
     }
     if (payload.user) Object.assign(state.user, payload.user);
-    if (Array.isArray(payload.characters)) state.characters = payload.characters;
+    if (Array.isArray(payload.characters)) state.characters = withLockedCharacters(payload.characters);
     if (Array.isArray(payload.worldbook)) state.worldbook = payload.worldbook;
     if (Array.isArray(payload.forumPosts)) state.forumPosts = payload.forumPosts;
     if (payload.chats) state.chats = payload.chats;

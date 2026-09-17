@@ -29,10 +29,12 @@
 .back-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   max-width: 100%;
+  /* 箭头与标题同色 */
+  color: var(--text-1);
   /* 视觉对齐：箭头图形左侧自带留白，用负边距把它推到与正文同一条左边线上 */
-  margin-left: -8px;
+  margin-left: -5px;
   text-align: left;
   transition: opacity 0.2s ease;
 }
@@ -41,10 +43,10 @@
   opacity: 0.45;
 }
 
-/* 只有箭头是强调蓝，大标题保持正文颜色 */
+/* 箭头缩小、且和大标题用同一个颜色（跟随 .back-btn 的 color） */
 .back-btn__arrow {
   flex: none;
-  color: var(--accent);
+  color: inherit;
 }
 
 .app-header__title {
@@ -56,12 +58,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.app-header__sub {
-  margin-top: 4px;
-  font-size: 12.5px;
-  color: var(--text-3);
 }
 
 /* ---------- 内容区 ---------- */
@@ -335,13 +331,6 @@
   border-bottom-right-radius: 6px;
 }
 
-.bubble-time {
-  margin: 2px 4px 12px;
-  font-size: 11px;
-  color: var(--text-3);
-  text-align: center;
-}
-
 /* ---------- 聊天底栏：满宽黑色磨砂，贴在屏幕最底部 ---------- */
 /*
    说明：底栏用 position: absolute 挂在应用面板（.app-screen）上，
@@ -570,6 +559,92 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+
+/* ---------- 角色编辑页 ---------- */
+/* 头像配色：点一下就换的小圆点 */
+.grad-dot {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+  transition: transform 0.15s var(--ease);
+}
+
+.grad-dot:active {
+  transform: scale(0.94);
+}
+
+.grad-dot.is-active {
+  border-color: #fff;
+}
+
+.grad-dot.is-locked {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* 多行输入框（人设、开场白） */
+.input--area {
+  line-height: 1.6;
+  resize: vertical;
+}
+
+/* 官方锁定角色：输入框灰掉，明确表示“只能看” */
+.input:disabled {
+  opacity: 0.62;
+  cursor: default;
+}
+
+/* ---------- 美化页：自定义应用图标 ---------- */
+/* 行首的小预览方块：没换图标时是默认磨砂玻璃 + 线稿，换了就显示图片 */
+.icon-pick {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.15);
+  border: 0.5px solid rgba(255, 255, 255, 0.32);
+  background-size: cover;
+  background-position: center;
+}
+
+.theme-light .icon-pick {
+  color: rgba(24, 24, 34, 0.7);
+  background-color: rgba(255, 255, 255, 0.48);
+  border-color: rgba(255, 255, 255, 0.7);
+}
+
+/* 换了自定义图标：去掉玻璃底，只留图片（圆角自动裁切） */
+.icon-pick.is-custom {
+  background-color: transparent;
+  border-color: transparent;
+}
+
+/* 行内小按钮：选择图片 / 换图 / 恢复默认 */
+.mini-btn {
+  flex: none;
+  padding: 7px 11px;
+  border-radius: 9px;
+  background: var(--card-bg-hover);
+  border: 0.5px solid var(--hairline);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: transform 0.15s var(--ease);
+}
+
+.mini-btn:active {
+  transform: scale(0.96);
+}
+
+.mini-btn--plain {
+  color: var(--text-3);
 }
 
 /* 滑块（亮度、temperature 等） */

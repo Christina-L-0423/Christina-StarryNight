@@ -15,6 +15,9 @@ window.SN = window.SN || {};
   const LOCAL_REPLY =
     "（本地演示回复）我还没连上真正的 AI。去「设置 → AI 接口」选一个服务商、填好密钥，点「测试连接」，我就能真正开口啦。";
 
+  /* 自定义应用图标压到 256px 就够（图标本身只有几十像素，压小一点省空间） */
+  const ICON_EDGE = 256;
+
   /* ============================================================
      1) 聊天：会话列表 → 点进去是聊天界面
      ============================================================ */
@@ -258,8 +261,6 @@ window.SN = window.SN || {};
 
       <div class="chat" v-else>
         <div class="chat__list">
-          <div class="bubble-time">{{ activeCharacter.tagline }}</div>
-
           <div class="bubble-row" v-for="(m, i) in messages" :key="i" :class="{ 'bubble-row--me': m.role === 'me' }">
             <div class="bubble" :class="m.role === 'me' ? 'bubble--me' : 'bubble--them'">
               <template v-if="m.text">{{ m.text }}</template>
@@ -418,6 +419,71 @@ window.SN = window.SN || {};
         }
       });
 
+      /* 桌面主屏的应用名称开关（Dock 的那个是上面的 dockLabels） */
+      const homeLabels = computed({
+        get: function () {
+          return settings.homeLabels;
+        },
+        set: function (value) {
+          settings.homeLabels = value;
+        }
+      });
+
+      /* ---- 自定义应用图标：给任意应用换成自己的图片 ---- */
+      const allApps = SN.allApps;
+      const iconStatus = ref("");
+      let iconStatusTimer = null;
+
+      /* settings.appIcons 里存的是 app id → 图片 dataURL */
+      const appIcons = computed(function () {
+        return settings.appIcons || {};
+      });
+
+      function iconName(id) {
+        const found = SN.allApps.filter(function (a) {
+          return a.id === id;
+        })[0];
+        return found ? found.name : "应用";
+      }
+
+      /* 预览小方块：有自定义图标就用图片铺满，没有就交给 CSS 的磨砂玻璃 */
+      function iconStyle(id) {
+        const url = appIcons.value[id];
+        return url ? { backgroundImage: 'url("' + url + '")' } : {};
+      }
+
+      function flashIconStatus(text) {
+        iconStatus.value = text;
+        window.clearTimeout(iconStatusTimer);
+        iconStatusTimer = window.setTimeout(function () {
+          iconStatus.value = "";
+        }, 2600);
+      }
+
+      /* 选图 → 压缩到 ICON_EDGE → 存进设置（桌面和 Dock 立刻生效） */
+      function pickAppIcon(id, event) {
+        const input = event.target;
+        const file = input.files && input.files[0];
+        input.value = ""; /* 清空 input，方便下次再选同一张图 */
+        if (!file) return;
+        SN.mediaStore
+          .processImageFile(file, ICON_EDGE)
+          .then(function (dataUrl) {
+            if (!settings.appIcons) settings.appIcons = {};
+            settings.appIcons[id] = dataUrl;
+            flashIconStatus("「" + iconName(id) + "」的图标已更换");
+          })
+          .catch(function (err) {
+            flashIconStatus((err && err.message) || "这张图用不了，换一张试试。");
+          });
+      }
+
+      function resetAppIcon(id) {
+        if (!settings.appIcons || !settings.appIcons[id]) return;
+        delete settings.appIcons[id];
+        flashIconStatus("「" + iconName(id) + "」的图标已恢复默认");
+      }
+
       return {
         wallpapers: wallpapers,
         customs: customs,
@@ -429,7 +495,14 @@ window.SN = window.SN || {};
         onAddImages: onAddImages,
         removeImage: removeImage,
         dockLabels: dockLabels,
-        battery: battery
+        homeLabels: homeLabels,
+        battery: battery,
+        allApps: allApps,
+        appIcons: appIcons,
+        iconStatus: iconStatus,
+        iconStyle: iconStyle,
+        pickAppIcon: pickAppIcon,
+        resetAppIcon: resetAppIcon
       };
     },
     template: `
@@ -463,18 +536,41 @@ window.SN = window.SN || {};
         <div class="row">
           <span class="row__main">
             <span class="row__label">Dock 显示应用名称</span>
-            <span class="row__sub">关掉之后更像原生 iOS</span>
           </span>
           <sn-switch v-model="dockLabels"></sn-switch>
         </div>
         <div class="row">
           <span class="row__main">
+            <span class="row__label">应用名称显示</span>
+          </span>
+          <sn-switch v-model="homeLabels"></sn-switch>
+        </div>
+        <div class="row">
+          <span class="row__main">
             <span class="row__label">状态栏电量</span>
-            <span class="row__sub">左右拖动试试，图标会跟着变</span>
           </span>
           <input class="range" type="range" min="0" max="100" v-model.number="battery" />
         </div>
       </div>
+
+      <p class="section-title">自定义应用图标</p>
+      <div class="list">
+        <div class="row" v-for="a in allApps" :key="a.id">
+          <span class="icon-pick" :class="{ 'is-custom': !!appIcons[a.id] }" :style="iconStyle(a.id)">
+            <sn-glyph v-if="!appIcons[a.id]" :name="a.icon" :size="18"></sn-glyph>
+          </span>
+          <span class="row__main">
+            <span class="row__label">{{ a.name }}</span>
+          </span>
+          <label class="mini-btn">
+            {{ appIcons[a.id] ? "换图" : "选择图片" }}
+            <input type="file" accept="image/*" hidden @change="pickAppIcon(a.id, $event)" />
+          </label>
+          <button class="mini-btn mini-btn--plain" type="button" v-if="appIcons[a.id]"
+            @click="resetAppIcon(a.id)">恢复默认</button>
+        </div>
+      </div>
+      <p class="field__hint" v-if="iconStatus">{{ iconStatus }}</p>
 
       <div class="btn-row">
         <button class="btn" type="button" @click="resetWallpaper">恢复默认壁纸</button>
@@ -605,27 +701,144 @@ window.SN = window.SN || {};
         return store.state.characters;
       });
 
-      /* 点角色卡 → 直接进聊天页 */
-      function startChat() {
-        store.openApp("chat");
+      /* 点角色卡 → 进入该角色的编辑页（查看设定；官方角色是只读的） */
+      function editCharacter(character) {
+        store.openApp("characterEdit", { characterId: character.id });
       }
 
       return {
         characters: characters,
-        startChat: startChat
+        editCharacter: editCharacter
       };
     },
     template: `
       <div class="card-grid">
-        <button class="tile" type="button" v-for="c in characters" :key="c.id" @click="startChat">
+        <button class="tile" type="button" v-for="c in characters" :key="c.id" @click="editCharacter(c)">
           <span class="avatar avatar--lg" :style="{ backgroundImage: c.gradient }">{{ c.name.charAt(0) }}</span>
           <span class="tile__name">{{ c.name }}</span>
-          <span class="tile__desc">{{ c.tagline }}</span>
+          <span class="tile__desc" v-if="c.locked">官方设定 · 只能查看</span>
         </button>
       </div>
 
       <div class="btn-row">
         <button class="btn" type="button" disabled>新建角色卡（后续版本）</button>
+      </div>
+    `
+  };
+
+  /* ============================================================
+     5.5) 角色编辑：查看 / 修改角色卡
+          - 官方角色（locked）只能看，输入框全部禁用并给出锁定说明
+          - 用户角色可以随便改：改名、人设、开场白、头像渐变
+     ============================================================ */
+  SN.components["sn-character-edit-view"] = {
+    name: "sn-character-edit-view",
+    props: { app: { type: Object, default: null } },
+    setup: function () {
+      const store = SN.store;
+
+      /* 要编辑哪个角色：由「角色集」点卡片时通过 openApp 的第二个参数传进来 */
+      const characterId = computed(function () {
+        return (store.state.appParams || {}).characterId || "";
+      });
+
+      const character = computed(function () {
+        const list = store.state.characters;
+        for (let i = 0; i < list.length; i += 1) {
+          if (list[i].id === characterId.value) return list[i];
+        }
+        return list[0] || null;
+      });
+
+      /* 官方角色锁死设定：输入框禁用，也不会被误改 */
+      const locked = computed(function () {
+        return !!(character.value && character.value.locked);
+      });
+
+      /* 头像可选的渐变（点一下就换，和角色卡上的圆形头像一致） */
+      const gradients = [
+        "linear-gradient(150deg, #8ea2ff, #c86bff)",
+        "linear-gradient(150deg, #5ee7c4, #2f8fd6)",
+        "linear-gradient(150deg, #ffd479, #ff7a59)",
+        "linear-gradient(150deg, #ff9ec4, #b06bff)",
+        "linear-gradient(150deg, #7ee0ff, #4a6bff)"
+      ];
+
+      function setGradient(value) {
+        if (locked.value || !character.value) return;
+        character.value.gradient = value;
+      }
+
+      /* 开场白改了就重新出现在聊天里：清掉这个角色的聊天记录 */
+      function resetChat() {
+        if (!character.value) return;
+        SN.ui
+          .confirm({
+            message: "重置后这个角色的聊天记录会清空，重新从开场白开始。确定吗？",
+            confirmText: "重置",
+            danger: true
+          })
+          .then(function (ok) {
+            if (ok) store.clearChat(character.value.id);
+          });
+      }
+
+      return {
+        character: character,
+        locked: locked,
+        gradients: gradients,
+        setGradient: setGradient,
+        resetChat: resetChat,
+        /* 页头：标题显示角色名，返回键回到「角色集」 */
+        navTitle: computed(function () {
+          return character.value ? character.value.name : "角色编辑";
+        }),
+        navIsSub: true,
+        navBack: function () {
+          store.openApp("characters");
+        },
+        navBackLabel: "角色集"
+      };
+    },
+    template: `
+      <div v-if="!character" class="empty">这个角色不存在了。</div>
+
+      <div v-else>
+        <div class="card profile">
+          <span class="avatar avatar--lg" :style="{ backgroundImage: character.gradient }">
+            {{ character.name.charAt(0) }}
+          </span>
+          <p class="profile__name">{{ character.name }}</p>
+          <p class="profile__sign">{{ locked ? "官方设定 · 不可修改" : "自定义角色" }}</p>
+        </div>
+
+        <p class="section-title">头像配色</p>
+        <div class="chips">
+          <button class="grad-dot" type="button" v-for="g in gradients" :key="g"
+            :class="{ 'is-active': character.gradient === g, 'is-locked': locked }"
+            :style="{ backgroundImage: g }" @click="setGradient(g)"></button>
+        </div>
+
+        <p class="section-title">角色设定</p>
+        <label class="field">
+          <span class="field__label">名字</span>
+          <input class="input" type="text" v-model="character.name" :disabled="locked" />
+        </label>
+        <label class="field">
+          <span class="field__label">人设</span>
+          <textarea class="input input--area" rows="8" v-model="character.persona" :disabled="locked"></textarea>
+        </label>
+        <label class="field">
+          <span class="field__label">开场白</span>
+          <textarea class="input input--area" rows="3" v-model="character.greeting" :disabled="locked"></textarea>
+        </label>
+        <p class="field__hint" v-if="locked">
+          这个角色由官方统一维护，只能查看、不能修改；每次打开都会自动同步到最新设定。
+        </p>
+
+        <div class="btn-row">
+          <button class="btn" type="button" @click="resetChat">重置这个角色的聊天</button>
+        </div>
       </div>
     `
   };
@@ -893,38 +1106,33 @@ window.SN = window.SN || {};
           <button class="row" type="button" @click="openSub('api')">
             <span class="row__main">
               <span class="row__label">API</span>
-              <span class="row__sub">服务商、密钥、模型与测试连接</span>
             </span>
             <sn-glyph class="row__chev" name="chevron-right" :size="18"></sn-glyph>
           </button>
           <button class="row" type="button" @click="openSub('weather')">
             <span class="row__main">
               <span class="row__label">天气与位置</span>
-              <span class="row__sub">显示的城市名与经纬度</span>
             </span>
             <sn-glyph class="row__chev" name="chevron-right" :size="18"></sn-glyph>
           </button>
           <button class="row" type="button" @click="openSub('data')">
             <span class="row__main">
               <span class="row__label">数据管理</span>
-              <span class="row__sub">备份导出 / 导入 / 恢复出厂</span>
             </span>
             <sn-glyph class="row__chev" name="chevron-right" :size="18"></sn-glyph>
           </button>
           <button class="row" type="button" @click="openSub('changelog')">
             <span class="row__main">
               <span class="row__label">更新日志</span>
-              <span class="row__sub">新功能与改动记录</span>
             </span>
             <sn-glyph class="row__chev" name="chevron-right" :size="18"></sn-glyph>
           </button>
         </div>
-        <p class="field__hint">版本 {{ version }} · 数据存放在本机浏览器</p>
+        <p class="field__hint">版本 {{ version }}</p>
       </div>
 
       <!-- 子页：AI 接口 -->
       <div v-else-if="subPage === 'api'">
-        <p class="field__hint">点一个服务商自动填好地址和模型（推荐 DeepSeek，便宜好用）：</p>
       <div class="chips">
         <button class="chip" type="button" v-for="p in presets" :key="p.id" @click="applyPreset(p)">{{ p.name }}</button>
       </div>
@@ -951,28 +1159,27 @@ window.SN = window.SN || {};
         <div class="row">
           <span class="row__main">
             <span class="row__label">随机性 temperature</span>
-            <span class="row__sub">越小越稳重，越大越有想象力（当前 {{ settings.api.temperature }}）</span>
+            <span class="row__sub">{{ settings.api.temperature }}</span>
           </span>
           <input class="range" type="range" min="0" max="2" step="0.1" v-model.number="settings.api.temperature" />
         </div>
         <div class="row">
           <span class="row__main">
             <span class="row__label">回复长度上限</span>
-            <span class="row__sub">max_tokens（当前 {{ settings.api.maxTokens }}）</span>
+            <span class="row__sub">max_tokens {{ settings.api.maxTokens }}</span>
           </span>
           <input class="range" type="range" min="256" max="4096" step="128" v-model.number="settings.api.maxTokens" />
         </div>
         <div class="row">
           <span class="row__main">
             <span class="row__label">携带最近聊天</span>
-            <span class="row__sub">一次带多少条历史给 AI（当前 {{ settings.api.contextCount }}）</span>
+            <span class="row__sub">最近 {{ settings.api.contextCount }} 条</span>
           </span>
           <input class="range" type="range" min="4" max="50" step="2" v-model.number="settings.api.contextCount" />
         </div>
         <div class="row">
           <span class="row__main">
             <span class="row__label">流式输出</span>
-            <span class="row__sub">开启后回复像打字一样逐字出现</span>
           </span>
           <sn-switch v-model="settings.api.stream"></sn-switch>
         </div>
@@ -1018,7 +1225,6 @@ window.SN = window.SN || {};
         <div class="row">
           <span class="row__main">
             <span class="row__label">使用实时天气</span>
-            <span class="row__sub">关闭后只显示示例数据</span>
           </span>
           <sn-switch v-model="useLiveWeather"></sn-switch>
         </div>
@@ -1037,21 +1243,18 @@ window.SN = window.SN || {};
         <button class="row" type="button" @click="exportData">
           <span class="row__main">
             <span class="row__label">导出备份</span>
-            <span class="row__sub">把全部数据保存成一个 JSON 文件</span>
           </span>
           <sn-glyph class="row__chev" name="chevron-right" :size="18"></sn-glyph>
         </button>
         <button class="row" type="button" @click="pickFile">
           <span class="row__main">
             <span class="row__label">导入备份</span>
-            <span class="row__sub">从 JSON 文件恢复数据</span>
           </span>
           <sn-glyph class="row__chev" name="chevron-right" :size="18"></sn-glyph>
         </button>
         <button class="row" type="button" @click="askReset">
           <span class="row__main">
             <span class="row__label">恢复出厂设置</span>
-            <span class="row__sub">清空本机全部数据</span>
           </span>
           <sn-glyph class="row__chev" name="trash" :size="18"></sn-glyph>
         </button>

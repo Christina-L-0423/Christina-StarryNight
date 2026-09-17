@@ -14,12 +14,6 @@
   background: #05070f radial-gradient(120% 90% at 50% 0%, #131a38 0%, #05070f 60%);
 }
 
-.stage__tip {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.35);
-  text-align: center;
-}
-
 /* ---------- 手机本体 ---------- */
 .phone {
   position: relative;
@@ -41,9 +35,6 @@
     padding: 0;
     gap: 0;
     background: #000;
-  }
-  .stage__tip {
-    display: none;
   }
   .phone {
     width: 100vw;
@@ -307,12 +298,15 @@
   text-shadow: 0 1px 2px rgba(255, 255, 255, 0.75);
 }
 
-.home__hint {
-  margin-top: 22px;
-  font-size: 11.5px;
-  text-align: center;
-  color: var(--text-3);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+/* 用户自定义图标（美化 → 自定义应用图标）：
+   用自己的图片铺满圆角方块，所以去掉那层磨砂薄膜和亮边，
+   图片本身由 background-clip（圆角）裁切，和默认图标一样规整。 */
+.app-icon__box.is-custom {
+  background-color: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 /* ---------- 底部 Dock ---------- */
