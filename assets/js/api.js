@@ -218,7 +218,17 @@ window.SN = window.SN || {};
             choice && choice.message && typeof choice.message.content === "string"
               ? choice.message.content.trim()
               : "";
-          if (!text) throw new Error("服务商返回了空回复");
+          if (!text) {
+            /* 推理型模型（deepseek-flash / reasoner 这类）会先把额度花在思考内容上，
+               正文还没开始就被截断：此时 usage 里有 token，但 content 是空字符串。 */
+            const finish = choice && choice.finish_reason;
+            if (finish === "length") {
+              throw new Error(
+                "回复被长度上限截断了（模型先输出了思考内容）。请在设置里调大「回复长度上限」后重试。"
+              );
+            }
+            throw new Error("服务商返回了空回复");
+          }
           return text;
         });
       })
@@ -237,6 +247,95 @@ window.SN = window.SN || {};
     if (controller) controller.abort();
   }
 
+  /* ---------- 从任意结构里挖出「非空文本」（各家服务商返回格式不一样） ----------
+     能认出的形态：
+     ① 字符串                    "成功"
+     ② 多模态数组                [{ type: "text", text: "成功" }]
+     ③ 对象                      { text: "成功" } / { content: "成功" }
+     ④ 嵌套对象                  递归往里找（限 4 层，防止怪异结构里打转） */
+  function pickText(value, depth) {
+    if (value === null || value === undefined) return "";
+    if (typeof value === "string") return value.trim();
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    if (depth > 4) return "";
+    if (Array.isArray(value)) {
+      return value
+        .map(function (item) {
+          return pickText(item, depth + 1);
+        })
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+    }
+    if (typeof value === "object") {
+      const keys = [
+        "text",
+        "content",
+        "value",
+        "reasoning_content",
+        "reasoning",
+        "output_text",
+        "answer"
+      ];
+      for (let i = 0; i < keys.length; i++) {
+        const found = pickText(value[keys[i]], depth + 1);
+        if (found) return found;
+      }
+    }
+    return "";
+  }
+
+  /* 按「从最标准到最兜底」的顺序找文本，只要响应里任何一处有非空文本就算有回复 */
+  function extractAnyText(data) {
+    if (!data || typeof data !== "object") return "";
+    const choice = (Array.isArray(data.choices) && data.choices[0]) || null;
+    const candidates = [];
+    if (choice) {
+      if (choice.message) {
+        candidates.push(choice.message.content); /* 标准 OpenAI 格式 */
+        candidates.push(choice.message.reasoning_content); /* DeepSeek 推理模型多出来的字段 */
+        candidates.push(choice.message.reasoning); /* 部分服务商 / OpenRouter */
+      }
+      candidates.push(choice.delta && choice.delta.content); /* 服务商忽略了 stream:false 时 */
+      candidates.push(choice.text); /* 旧版 completions 格式 */
+    }
+    /* 网关 / 套壳代理常见形态 */
+    candidates.push(data.output_text, data.response, data.content, data.answer, data.message);
+    for (let i = 0; i < candidates.length; i++) {
+      const found = pickText(candidates[i], 0);
+      if (found) return found;
+    }
+    return "";
+  }
+
+  /* 响应体不是 JSON 时的兜底：有些服务商直接返回纯文本 */
+  function textFromRawBody(raw) {
+    const body = String(raw || "").trim();
+    if (!body) return "";
+    if (body.charAt(0) === "{" || body.charAt(0) === "[") return ""; /* 是 JSON 但字段没认出来 */
+    return body.slice(0, 200);
+  }
+
+  /* 组装一份可读的调试快照，打印到控制台便于排查字段名 / 响应结构 */
+  function debugSnapshot(data, raw, status) {
+    const choice = (data && Array.isArray(data.choices) && data.choices[0]) || null;
+    return {
+      httpStatus: status,
+      model: (data && data.model) || null,
+      object: (data && data.object) || null,
+      finish_reason: (choice && choice.finish_reason) || null,
+      usage: (data && data.usage) || null,
+      messageKeys: choice && choice.message ? Object.keys(choice.message) : null,
+      message: (choice && choice.message) || null,
+      choices: (data && data.choices) || null,
+      rawPreview: String(raw || "").slice(0, 600)
+    };
+  }
+
+  /* 测试连接用的提示词：极短、极确定，强制模型吐出具体内容，
+     不让它回「好的」或空字符串——这样「有内容」一定看得见，「空」一定有问题 */
+  const TEST_PROMPT = "请只回复两个字：成功";
+
   /* 设置页的「测试连接」：发一条极小的请求，确认配置是否正确 */
   function testConnection() {
     const api = apiSettings();
@@ -245,44 +344,59 @@ window.SN = window.SN || {};
     if (!api.apiKey && !isLocalUrl(api.baseUrl)) {
       return Promise.resolve({ ok: false, message: "请先填写 API Key（本地 Ollama 可以不填）。" });
     }
-    return chat({ messages: [{ role: "user", content: "请只回复两个字：成功" }], noStream: true, maxTokens: 16 })
-      .then(function (response) {
-        // chat() 在 noStream 模式下可能返回字符串，也可能返回完整响应对象
-        // 这里把两种情况都兼容：字符串直接用，对象则从 choices[0].message.content 读
-        let text = "";
-        if (typeof response === "string") {
-          text = response.trim();
-        } else if (response && response.choices && response.choices[0]) {
-          const choice = response.choices[0];
-          if (choice.message && typeof choice.message.content === "string") {
-            text = choice.message.content.trim();
+    const headers = { "Content-Type": "application/json" };
+    if (api.apiKey) headers.Authorization = "Bearer " + String(api.apiKey).trim();
+
+    /* 这里自己发一次非流式请求（不再走 chat()），原因有三：
+       ① chat() 非流式只返回一段字符串，拿不到完整响应结构，也没法排查字段名；
+       ② 不设 max_tokens —— 推理型模型（deepseek-flash / reasoner）会先把额度花在思考上、
+          正文还没开始就被截断，于是「消耗了 token 却显示空回复」；
+       ③ 各家字段名略有差异，交给 extractAnyText 兜住所有形态。 */
+    const body = {
+      model: String(api.model || "").trim(),
+      messages: [{ role: "user", content: TEST_PROMPT }],
+      temperature: 0,
+      stream: false
+    };
+
+    return fetch(joinUrl(api.baseUrl), {
+      method: "POST",
+      headers: headers,
+      body: JSON.stringify(body)
+    })
+      .then(function (resp) {
+        return resp.text().then(function (raw) {
+          if (!resp.ok) {
+            throw new Error("HTTP " + resp.status + (raw ? " " + String(raw).slice(0, 200) : ""));
           }
-        }
+          let data = null;
+          try {
+            data = JSON.parse(raw);
+          } catch (err) {
+            data = null; /* 有的网关返回纯文本，走下面的兜底 */
+          }
 
-        // 调试信息：保留完整响应结构，方便排查字段名/结构问题
-        const debug = {
-          id: response && response.id || null,
-          model: response && response.model || null,
-          object: response && response.object || null,
-          created: response && response.created || null,
-          choices: response && response.choices || null,
-          usage: response && response.usage || null
-        };
+          const debug = debugSnapshot(data, raw, resp.status);
+          /* 按排查需求打印「完整响应结构」：字段名对不对，看这一行就知道 */
+          console.log("[StarryNight] 测试连接完整响应结构", debug);
 
-        if (!text) {
-          return {
-            ok: false,
-            message: "服务商返回为空，模型可能不可用或不支持此请求。",
-            _debug: debug
-          };
-        }
-        return { ok: true, reply: text, _debug: debug };
+          /* 判定原则：只要响应里有任何非空文本，就算连接成功 */
+          const text = extractAnyText(data) || textFromRawBody(raw);
+          if (!text) {
+            const hint =
+              debug.finish_reason === "length"
+                ? "模型把额度花在了思考内容上、正文被截断，请调大「回复长度上限」后重试。"
+                : "模型可能不可用、不支持此请求，或返回了无法识别的结构（完整响应已打印到控制台）。";
+            return { ok: false, message: "服务商返回为空：" + hint, _debug: debug };
+          }
+          return { ok: true, reply: text, _debug: debug };
+        });
       })
       .catch(function (err) {
         if (err && err.name === "AbortError") {
           return { ok: false, message: "已取消。" };
         }
-        return { ok: false, message: err && err.message ? err.message : "测试失败。" };
+        return { ok: false, message: friendlyError(err) };
       });
   }
 
