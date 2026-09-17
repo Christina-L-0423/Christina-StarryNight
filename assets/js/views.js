@@ -746,6 +746,10 @@ window.SN = window.SN || {};
           .then(function (result) {
             apiStatusOk.value = !!result.ok;
             apiStatus.value = result.ok ? "连接成功！模型回复：「" + result.reply + "」" : result.message;
+            // 顺手把调试信息打印到控制台，方便排查响应结构问题
+            if (result._debug) {
+              console.log("[StarryNight] test connection debug", result._debug);
+            }
           })
           .catch(function () {
             apiStatusOk.value = false;

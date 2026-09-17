@@ -246,12 +246,37 @@ window.SN = window.SN || {};
       return Promise.resolve({ ok: false, message: "请先填写 API Key（本地 Ollama 可以不填）。" });
     }
     return chat({ messages: [{ role: "user", content: "请只回复两个字：成功" }], noStream: true, maxTokens: 16 })
-      .then(function (raw) {
-        const text = String(raw || "").trim();
-        if (!text) {
-          return { ok: false, message: "服务商返回为空，模型可能不可用或不支持此请求。" };
+      .then(function (response) {
+        // chat() 在 noStream 模式下可能返回字符串，也可能返回完整响应对象
+        // 这里把两种情况都兼容：字符串直接用，对象则从 choices[0].message.content 读
+        let text = "";
+        if (typeof response === "string") {
+          text = response.trim();
+        } else if (response && response.choices && response.choices[0]) {
+          const choice = response.choices[0];
+          if (choice.message && typeof choice.message.content === "string") {
+            text = choice.message.content.trim();
+          }
         }
-        return { ok: true, reply: text };
+
+        // 调试信息：保留完整响应结构，方便排查字段名/结构问题
+        const debug = {
+          id: response && response.id || null,
+          model: response && response.model || null,
+          object: response && response.object || null,
+          created: response && response.created || null,
+          choices: response && response.choices || null,
+          usage: response && response.usage || null
+        };
+
+        if (!text) {
+          return {
+            ok: false,
+            message: "服务商返回为空，模型可能不可用或不支持此请求。",
+            _debug: debug
+          };
+        }
+        return { ok: true, reply: text, _debug: debug };
       })
       .catch(function (err) {
         if (err && err.name === "AbortError") {
