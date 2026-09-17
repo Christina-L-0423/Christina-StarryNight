@@ -418,37 +418,30 @@
   animation-delay: 0.2s;
 }
 
-/* 「新页面」虚线块（编辑模式下出现在最后一页末尾） */
-.home__cell--new {
-  cursor: pointer;
-  gap: 7px;
+/* 滑动式翻页：一条轨道放所有页，transform 切换，边缘留白隐藏相邻页 */
+.home__pager {
+  overflow: hidden;
+  border-radius: 8px;
 }
 
-.home__newbox {
-  width: 60px;
-  height: 60px;
-  border-radius: 17px;
-  display: grid;
-  place-items: center;
-  font-size: 22px;
-  color: rgba(255, 255, 255, 0.85);
-  border: 1.5px dashed rgba(255, 255, 255, 0.5);
-  background: rgba(255, 255, 255, 0.06);
+.home__track {
+  display: flex;
+  transition: transform 0.3s var(--ease);
+  will-change: transform;
 }
 
-.home__newlabel {
-  font-size: 11.5px;
-  color: var(--text-1);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+.home__page {
+  flex: 0 0 100%;
+  min-width: 0;
 }
 
-/* 页点与编辑条 */
+/* 页点：固定在桌面底部、Dock 栏上方（在 .home 滚动区之外，不随内容滚动） */
 .home__dots {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  margin-top: 18px;
+  padding: 4px 0 10px;
 }
 
 .home__dot {
@@ -464,23 +457,12 @@
   background: #fff;
 }
 
-.home__dot--add {
-  width: auto;
-  height: auto;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 11px;
-  border: 1px dashed rgba(255, 255, 255, 0.5);
-}
-
 .home__editbar {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  margin-top: 10px;
+  padding: 0 22px 4px;
 }
 
 .home__edithint {

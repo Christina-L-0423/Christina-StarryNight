@@ -210,12 +210,15 @@ window.SN = window.SN || {};
           return a.id;
         });
         const saved = store.state.settings.homeLayout;
-        const pages = (Array.isArray(saved) ? saved : []).map(function (p) {
-          return (Array.isArray(p) ? p : []).filter(function (id, i, arr) {
-            return ids.indexOf(id) !== -1 && arr.indexOf(id) === i;
+        const pages = (Array.isArray(saved) ? saved : [])
+          .map(function (p) {
+            return (Array.isArray(p) ? p : []).filter(function (id, i, arr) {
+              return ids.indexOf(id) !== -1 && arr.indexOf(id) === i;
+            });
+          })
+          .filter(function (p) {
+            return p.length > 0; /* 空页一律回收（边缘新建时图标已先移入新页） */
           });
-        });
-        while (pages.length > 1 && pages[pages.length - 1].length === 0) pages.pop();
         if (!pages.length) pages.push([]);
         const placed = pages.reduce(function (n, p) {
           return n.concat(p);
@@ -238,16 +241,6 @@ window.SN = window.SN || {};
 
       function goPage(i) {
         page.value = Math.max(0, Math.min(layout.value.length - 1, i));
-      }
-
-      function addPage() {
-        const pages = layout.value.map(function (p) {
-          return p.slice();
-        });
-        if (pages.length >= 5) return;
-        pages.push([]);
-        persist(pages);
-        page.value = pages.length - 1;
       }
 
       function finishEdit() {
@@ -285,7 +278,6 @@ window.SN = window.SN || {};
         (pages[d.page] || []).splice(d.index, 1);
         const el = document.elementFromPoint(d.x + 30, d.y + 30);
         const slot = el && el.closest ? el.closest("[data-slot]") : null;
-        const newTile = el && el.closest ? el.closest("[data-newpage]") : null;
         let target = null;
         if (slot) {
           const pi = parseInt(slot.getAttribute("data-page"), 10);
@@ -296,11 +288,8 @@ window.SN = window.SN || {};
             target = pi;
           }
         }
-        if (target === null && newTile) {
-          pages.push([d.id]);
-          target = pages.length - 1;
-        }
         if (target === null) {
+          /* 没落在任何格子上（比如拖到了网格外面）：放回原页末尾 */
           const home = pages[Math.min(d.page, pages.length - 1)];
           home.push(d.id);
           target = Math.min(d.page, pages.length - 1);
@@ -313,6 +302,32 @@ window.SN = window.SN || {};
         page.value = Math.min(target, pages.length - 1);
       }
 
+      /* 拖到没有页面的那一侧：自动新开一页，把图标移过去并翻到那页 */
+      function moveToNewPage(side) {
+        const d = dragging.value;
+        if (!d || layout.value.length >= 5) return;
+        const pages = layout.value.map(function (p) {
+          return p.slice();
+        });
+        const fromList = pages[d.page] || [];
+        fromList.splice(d.index, 1);
+        const fromEmpty = fromList.length === 0;
+        if (fromEmpty) pages.splice(d.page, 1);
+        let newIndex;
+        if (side === "before") {
+          newIndex = Math.min(d.page, pages.length);
+          pages.splice(newIndex, 0, []);
+        } else {
+          pages.push([]);
+          newIndex = pages.length - 1;
+        }
+        pages[newIndex].push(d.id);
+        persist(pages);
+        d.page = newIndex;
+        d.index = 0;
+        page.value = newIndex;
+      }
+
       function onMove(e) {
         if (!dragging.value) {
           if (lpPending && Math.abs(e.clientX - lpPending.x) + Math.abs(e.clientY - lpPending.y) > 12) {
@@ -323,15 +338,17 @@ window.SN = window.SN || {};
         }
         dragging.value.x = e.clientX - 30;
         dragging.value.y = e.clientY - 30;
-        if (pagerEl.value) {
+        if (pagerEl.value && Date.now() - flipAt > 450) {
           const r = pagerEl.value.getBoundingClientRect();
-          const now = Date.now();
-          if (e.clientX < r.left + 32 && page.value > 0 && now - flipAt > 450) {
-            goPage(page.value - 1);
-            flipAt = now;
-          } else if (e.clientX > r.right - 32 && page.value < layout.value.length - 1 && now - flipAt > 450) {
-            goPage(page.value + 1);
-            flipAt = now;
+          flipAt = Date.now();
+          if (e.clientX < r.left + 32) {
+            /* 左边缘：左边有页就翻过去；没有就在当前页前面新开一页 */
+            if (page.value > 0) goPage(page.value - 1);
+            else moveToNewPage("before");
+          } else if (e.clientX > r.right - 32) {
+            /* 右边缘：右边有页就翻过去；没有就在最后新开一页 */
+            if (page.value < layout.value.length - 1) goPage(page.value + 1);
+            else moveToNewPage("after");
           }
         }
         const el = document.elementFromPoint(e.clientX, e.clientY);
@@ -346,9 +363,15 @@ window.SN = window.SN || {};
 
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", function () {
+        /* 关键：清掉长按计时器。否则点进应用后计时器仍会触发，
+           退出应用回到桌面就「自动进入编辑模式」 */
+        window.clearTimeout(lpTimer);
+        lpPending = null;
         if (dragging.value) drop();
       });
       window.addEventListener("pointercancel", function () {
+        window.clearTimeout(lpTimer);
+        lpPending = null;
         dragging.value = null;
         hover.value = null;
       });
@@ -387,7 +410,6 @@ window.SN = window.SN || {};
         appById: appById,
         openApp: openApp,
         goPage: goPage,
-        addPage: addPage,
         finishEdit: finishEdit,
         cellDown: cellDown,
         pagerDown: pagerDown,
@@ -400,39 +422,36 @@ window.SN = window.SN || {};
 
         <div class="home__pager" ref="pagerEl" :class="{ 'is-editing': editing }"
              @pointerdown="pagerDown" @pointerup="pagerUp">
-          <div class="home__grid" v-for="(p, pi) in layout" :key="pi" v-show="pi === page">
-            <div class="home__cell" v-for="i in SLOTS" :key="i"
-                 data-slot :data-page="pi" :data-index="i - 1"
-                 :class="{
-                   'is-hover': hover && hover.page === pi && hover.index === i - 1,
-                   'is-source': dragging && dragging.page === pi && dragging.index === i - 1
-                 }"
-                 @pointerdown="cellDown($event, p[i - 1], pi, i - 1)">
-              <sn-app-icon v-if="p[i - 1]" :app="appById(p[i - 1])" :show-label="showLabel" @open="openApp"></sn-app-icon>
-            </div>
-            <div class="home__cell home__cell--new" v-if="editing && pi === layout.length - 1 && layout.length < 5"
-                 data-newpage="1" @pointerdown.stop @click.stop="addPage">
-              <span class="home__newbox">＋</span>
-              <span class="home__newlabel" v-if="showLabel">新页面</span>
+          <div class="home__track" :style="{ transform: 'translateX(-' + page * 100 + '%)' }">
+            <div class="home__page" v-for="(p, pi) in layout" :key="pi">
+              <div class="home__grid">
+                <div class="home__cell" v-for="i in SLOTS" :key="i"
+                     data-slot :data-page="pi" :data-index="i - 1"
+                     :class="{
+                       'is-hover': hover && hover.page === pi && hover.index === i - 1,
+                       'is-source': dragging && dragging.page === pi && dragging.index === i - 1
+                     }"
+                     @pointerdown="cellDown($event, p[i - 1], pi, i - 1)">
+                  <sn-app-icon v-if="p[i - 1]" :app="appById(p[i - 1])" :show-label="showLabel" @open="openApp"></sn-app-icon>
+                </div>
+              </div>
             </div>
           </div>
         </div>
+      </div>
 
-        <div class="home__dots">
-          <button class="home__dot" type="button" v-for="(p, pi) in layout" :key="pi"
-                  :class="{ 'is-active': pi === page }" @click="goPage(pi)"></button>
-          <button class="home__dot home__dot--add" type="button" v-if="editing && layout.length < 5"
-                  title="新增页面" @click="addPage">＋新页面</button>
-        </div>
+      <div class="home__dots">
+        <button class="home__dot" type="button" v-for="(p, pi) in layout" :key="pi"
+                :class="{ 'is-active': pi === page }" @click="goPage(pi)"></button>
+      </div>
 
-        <div class="home__editbar" v-if="editing">
-          <span class="home__edithint">拖动图标排序 · 拖到屏幕边缘翻页 · 拖到「新页面」块移到新页</span>
-          <button class="home__done" type="button" @click="finishEdit">完成</button>
-        </div>
+      <div class="home__editbar" v-if="editing">
+        <span class="home__edithint">拖动图标排序 · 拖到屏幕边缘翻页或新建页面</span>
+        <button class="home__done" type="button" @click="finishEdit">完成</button>
+      </div>
 
-        <div class="home__ghost" v-if="dragging" :style="{ left: dragging.x + 'px', top: dragging.y + 'px' }">
-          <sn-app-icon :app="appById(dragging.id)" :show-label="false"></sn-app-icon>
-        </div>
+      <div class="home__ghost" v-if="dragging" :style="{ left: dragging.x + 'px', top: dragging.y + 'px' }">
+        <sn-app-icon :app="appById(dragging.id)" :show-label="false"></sn-app-icon>
       </div>
     `
   };
