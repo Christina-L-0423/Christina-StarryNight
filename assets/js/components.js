@@ -239,10 +239,12 @@ window.SN = window.SN || {};
         const v = this.viewRef;
         return (v && v.navTitle) || this.meta.name;
       },
-      backLabel: function () {
-        if (!this.navIsSub) return "桌面";
+      /* 返回键上不再显示「桌面 / 返回」这种文字（只剩箭头 + 大标题），
+         这个标签只留给读屏软件，界面上看不见。 */
+      backAriaLabel: function () {
+        if (!this.navIsSub) return "返回桌面";
         const v = this.viewRef;
-        return (v && v.navBackLabel) || "返回";
+        return "返回" + ((v && v.navBackLabel) || "");
       }
     },
     methods: {
@@ -258,12 +260,12 @@ window.SN = window.SN || {};
     template:
       '<section class="app-screen">' +
       '<header class="app-header">' +
-      '<div class="app-header__bar">' +
-      '<button class="back-btn" type="button" @click="onBack">' +
-      '<sn-glyph name="chevron-left" :size="18"></sn-glyph><span>{{ backLabel }}</span>' +
+      /* 左上角是连在一起的一整块：[箭头 + 大标题]，整块可点返回。
+         没有第二个文字标签，也没有磨砂底 —— 箭头就是唯一的“退出”标记。 */
+      '<button class="back-btn" type="button" :aria-label="backAriaLabel" @click="onBack">' +
+      '<sn-glyph class="back-btn__arrow" name="chevron-left" :size="26"></sn-glyph>' +
+      '<span class="app-header__title">{{ title }}</span>' +
       "</button>" +
-      "</div>" +
-      '<h1 class="app-header__title">{{ title }}</h1>' +
       '<p class="app-header__sub" v-if="!navIsSub">{{ meta.intro }}</p>' +
       "</header>" +
       '<div class="app-body">' +

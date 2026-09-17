@@ -19,41 +19,43 @@
 }
 
 /* ---------- 标题栏 ---------- */
+/* 每个页面的左上角只有连在一起的一整块：[箭头 + 大标题]，点它返回上一层。
+   箭头只有一个（没有「桌面 / 返回」文字），也没有胶囊磨砂底。 */
 .app-header {
   padding: 62px 20px 10px;
   flex: none;
 }
 
-.app-header__bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 32px;
-}
-
 .back-btn {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  height: 32px;
-  padding: 0 12px 0 8px;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--accent);
-  border-radius: 999px;
-  background: var(--card-bg);
-  transition: background 0.2s ease;
+  gap: 4px;
+  max-width: 100%;
+  /* 视觉对齐：箭头图形左侧自带留白，用负边距把它推到与正文同一条左边线上 */
+  margin-left: -8px;
+  text-align: left;
+  transition: opacity 0.2s ease;
 }
 
 .back-btn:active {
-  background: var(--card-bg-hover);
+  opacity: 0.45;
+}
+
+/* 只有箭头是强调蓝，大标题保持正文颜色 */
+.back-btn__arrow {
+  flex: none;
+  color: var(--accent);
 }
 
 .app-header__title {
-  margin-top: 10px;
+  min-width: 0;
   font-size: 30px;
   font-weight: 700;
   letter-spacing: -0.4px;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-header__sub {
