@@ -669,29 +669,122 @@ window.SN = window.SN || {};
         });
       });
 
+      const showForm = ref(false);
+      const draft = ref(null); /* { title, category, keywords, content, constant } */
+
+      function openForm() {
+        draft.value = { title: "", category: "", keywords: "", content: "", constant: false };
+        showForm.value = true;
+      }
+
+      function closeForm() {
+        showForm.value = false;
+        draft.value = null;
+      }
+
+      function saveEntry() {
+        const d = draft.value;
+        if (!d) return;
+        const title = String(d.title || "").trim();
+        const content = String(d.content || "").trim();
+        if (!title || !content) return;
+        const category = String(d.category || "").trim() || "自定义";
+        store.state.worldbook.push({
+          id: "wb_" + Date.now().toString(36),
+          title: title,
+          category: category,
+          keywords: String(d.keywords || "").trim(),
+          content: content,
+          constant: !!d.constant,
+          enabled: true
+        });
+        if (store.persistNow) store.persistNow();
+        filter.value = category; /* 存完切到新分类，马上能看到 */
+        closeForm();
+      }
+
+      function removeEntry(item) {
+        SN.ui
+          .confirm({ message: "删除条目「" + (item.title || "未命名") + "」？", confirmText: "删除", danger: true })
+          .then(function (ok) {
+            if (!ok) return;
+            store.state.worldbook = store.state.worldbook.filter(function (x) {
+              return x.id !== item.id;
+            });
+            if (store.persistNow) store.persistNow();
+          });
+      }
+
       return {
         filter: filter,
         categories: categories,
-        entries: entries
+        entries: entries,
+        showForm: showForm,
+        draft: draft,
+        openForm: openForm,
+        closeForm: closeForm,
+        saveEntry: saveEntry,
+        removeEntry: removeEntry
       };
     },
     template: `
-      <div class="chips">
-        <button class="chip" type="button" v-for="c in categories" :key="c"
-          :class="{ 'is-active': c === filter }" @click="filter = c">{{ c }}</button>
-      </div>
-
-      <div class="list">
-        <div class="row" v-for="item in entries" :key="item.id">
-          <span class="row__main">
-            <span class="row__label">{{ item.title }}</span>
-            <span class="row__sub row__sub--wrap">{{ item.content }}</span>
-          </span>
-          <span class="chip">{{ item.category }}</span>
+      <template v-if="!showForm">
+        <div class="chips">
+          <button class="chip" type="button" v-for="c in categories" :key="c"
+            :class="{ 'is-active': c === filter }" @click="filter = c">{{ c }}</button>
         </div>
-      </div>
 
-      <div class="empty" v-if="!entries.length">这个世界书分类还是空的。</div>
+        <div class="list">
+          <div class="row" v-for="item in entries" :key="item.id">
+            <span class="row__main">
+              <span class="row__label">{{ item.title }}<span class="chip" v-if="item.constant">常驻</span></span>
+              <span class="row__sub row__sub--wrap">{{ item.content }}</span>
+              <span class="row__sub" v-if="item.keywords">关键词：{{ item.keywords }}</span>
+            </span>
+            <span class="chip">{{ item.category }}</span>
+            <button class="mini-btn mini-btn--plain" type="button" @click="removeEntry(item)">删除</button>
+          </div>
+        </div>
+
+        <div class="empty" v-if="!entries.length">这个世界书分类还是空的。</div>
+        <div class="btn-row">
+          <button class="btn btn--primary" type="button" @click="openForm">新建条目</button>
+        </div>
+        <p class="field__hint">聊天里聊到关键词时这条会自动进提示词；勾「常驻」则每次都带。条目会随备份文件一起导出/导入。</p>
+      </template>
+      <template v-else>
+        <label class="field">
+          <span class="field__label">标题</span>
+          <input class="input" v-model="draft.title" type="text" placeholder="例如：北极星观测指南" />
+        </label>
+        <label class="field">
+          <span class="field__label">分类（留空＝「自定义」）</span>
+          <input class="input" v-model="draft.category" type="text" placeholder="例如：设定资料" />
+        </label>
+        <label class="field">
+          <span class="field__label">触发关键词（逗号分隔）</span>
+          <input class="input" v-model="draft.keywords" type="text" placeholder="星空, 北极星, 星座" />
+        </label>
+        <label class="field">
+          <span class="field__label">内容（AI 会把这段当参考资料）</span>
+          <textarea class="input input--area" rows="6" v-model="draft.content" placeholder="写清楚这条设定的具体内容…"></textarea>
+        </label>
+        <div class="list">
+          <div class="row">
+            <span class="row__main">
+              <span class="row__label">常驻（每次都带进提示词）</span>
+              <span class="row__sub">不勾的话，聊到关键词才会带上</span>
+            </span>
+            <span @click.stop>
+              <sn-switch :model-value="draft.constant" @update:model-value="draft.constant = !draft.constant"></sn-switch>
+            </span>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn--primary" type="button" :disabled="!(draft.title || '').trim() || !(draft.content || '').trim()" @click="saveEntry">保存</button>
+          <button class="btn" type="button" @click="closeForm">取消</button>
+        </div>
+      </template>
     `
   };
 
@@ -713,9 +806,32 @@ window.SN = window.SN || {};
         store.openApp("characterEdit", { characterId: character.id });
       }
 
+      /* 新建自定义角色：先进角色集列表，再跳到编辑页填设定 */
+      function createCharacter() {
+        const gradients = [
+          "linear-gradient(150deg, #5ee7c4, #2f8fd6)",
+          "linear-gradient(150deg, #ffd479, #ff7a59)",
+          "linear-gradient(150deg, #ff9ec4, #b06bff)",
+          "linear-gradient(150deg, #7ee0ff, #4a6bff)",
+          "linear-gradient(150deg, #8ea2ff, #c86bff)"
+        ];
+        const created = {
+          id: "char_" + Date.now().toString(36),
+          name: "新角色",
+          persona: "",
+          greeting: "你好呀，很高兴认识你。",
+          gradient: gradients[store.state.characters.length % gradients.length],
+          locked: false
+        };
+        store.state.characters.push(created);
+        if (store.persistNow) store.persistNow();
+        store.openApp("characterEdit", { characterId: created.id });
+      }
+
       return {
         characters: characters,
-        editCharacter: editCharacter
+        editCharacter: editCharacter,
+        createCharacter: createCharacter
       };
     },
     template: `
@@ -728,8 +844,9 @@ window.SN = window.SN || {};
       </div>
 
       <div class="btn-row">
-        <button class="btn" type="button" disabled>新建角色卡（后续版本）</button>
+        <button class="btn btn--primary" type="button" @click="createCharacter">新建角色卡</button>
       </div>
+      <p class="field__hint">自定义角色会保存在本机，并随备份文件一起导出/导入；官方角色不受影响，始终排在最前面。</p>
     `
   };
 
@@ -790,12 +907,34 @@ window.SN = window.SN || {};
           });
       }
 
+      /* 删除自定义角色：官方角色（locked）不给删 */
+      function removeCharacter() {
+        if (!character.value || locked.value) return;
+        const target = character.value;
+        SN.ui
+          .confirm({
+            message: "删除「" + target.name + "」？这个角色的聊天记录也会一起清掉，且无法恢复。",
+            confirmText: "删除",
+            danger: true
+          })
+          .then(function (ok) {
+            if (!ok) return;
+            store.state.characters = store.state.characters.filter(function (c) {
+              return c.id !== target.id;
+            });
+            if (store.state.chats[target.id]) delete store.state.chats[target.id];
+            if (store.persistNow) store.persistNow();
+            store.openApp("characters");
+          });
+      }
+
       return {
         character: character,
         locked: locked,
         gradients: gradients,
         setGradient: setGradient,
         resetChat: resetChat,
+        removeCharacter: removeCharacter,
         /* 页头：标题显示角色名，返回键回到「角色集」 */
         navTitle: computed(function () {
           return character.value ? character.value.name : "角色编辑";
@@ -845,6 +984,9 @@ window.SN = window.SN || {};
 
         <div class="btn-row">
           <button class="btn" type="button" @click="resetChat">重置这个角色的聊天</button>
+        </div>
+        <div class="btn-row" v-if="!locked">
+          <button class="btn btn--danger" type="button" @click="removeCharacter">删除这个角色</button>
         </div>
       </div>
     `

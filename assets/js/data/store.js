@@ -435,6 +435,7 @@ window.SN = window.SN || {};
     timeStamp: timeStamp,
     exportData: exportData,
     importData: importData,
+    applySnapshot: applySnapshot,
     resetAll: resetAll,
     persistNow: persistNow,
     snapshot: snapshot
