@@ -13,39 +13,9 @@
 ### 方式 1：最简单 —— 直接双击打开
 双击 `index.html` 文件，浏览器就会打开小手机。
 
-### 方式 2：本地服务器（推荐，手机也能访问）
-在项目文件夹里打开终端（PowerShell），输入：
+### 方式 2：用GitHub自部署
 
-```powershell
-python -m http.server 8080
-```
 
-然后在浏览器打开：`http://127.0.0.1:8080`
-
-想用真手机看，就让手机和电脑连同一个 WiFi，然后手机浏览器访问
-`http://电脑的局域网IP:8080`（电脑 IP 可以用 `ipconfig` 查看）。
-
-### 方式 3：VS Code 插件
-装一个 **Live Server** 插件，右键 `index.html` → `Open with Live Server`。
-
-### 方式 3：在线网页（GitHub Pages，任何设备直接打开）
-> 🌐 **https://christina-l-0423.github.io/Christina-StarryNight/**
-
-第一次需要先在 GitHub 网页上开启（只需一次，以后每次 push 自动更新）：
-
-1. 打开仓库页面 → 点 **Settings**（顶部标签，齿轮图标）
-2. 左侧栏找到 **Pages**
-3. **Build and deployment → Source** 下拉框选 **Deploy from a branch**
-   （如果显示的是 GitHub Actions，就改成它）
-4. 下面的 **Branch** 选 `main`，目录保持 `/ (root)`，点 **Save**
-5. 等 1~3 分钟，刷新 Pages 页面，顶部出现绿条
-   `Your site is live at https://christina-l-0423.github.io/Christina-StarryNight/` 就成功了
-
-> 手机浏览器打开上面网址即可全屏使用；也可以「添加到主屏幕」当 App 用。
-> 注意：在线版的数据存在**那台设备的浏览器**里，和本地电脑互不相通。
-
-### 方式 4：VS Code 插件（备选）
-装一个 **Live Server** 插件，右键 `index.html` → `Open with Live Server`。
 
 ---
 
@@ -71,12 +41,30 @@ assets/
       apiClient.js        ← AI 对话客户端（OpenAI 兼容：组装消息 / 流式解析 / 报错人话）
     ui/                   ← 【界面层】「长什么样」+【设置层】「让用户改什么」
       components.js       ← 界面组件（状态栏、小组件、图标、Dock、应用面板）
+      home.js             ← 桌面：固定空槽、跟手滑动、长按拖动与边缘翻页
       views.js            ← 应用页面：聊天 / 美化 / 论坛 / 世界书 / 角色集 / 角色编辑 / 用户 / 设置
       manageViews.js      ← 设置里的三个管理页：提示词预设 / 正则 / 记忆库
     app.js                ← 启动文件：先打开图片库，再把组件注册进去并挂载
+tests/
+  home.browser.cjs        ← 桌面交互自测（拖动 / 空位 / 翻页 / 滑动，用本机 Edge 实跑）
 ```
 
-**加载顺序不能改**：`config → data/defaults → data/store → data/mediaStore → logic/weather → logic/prompt → logic/memory → logic/apiClient → ui/components → ui/views → ui/manageViews → app`。
+**加载顺序不能改**：`config → data/defaults → data/store → data/mediaStore → logic/weather → logic/prompt → logic/memory → logic/apiClient → ui/components → ui/home → ui/views → ui/manageViews → app`。
+
+桌面的拖拽、边缘翻页、跟手滑动很难靠肉眼一次看准，所以放了一个自测脚本：
+
+```
+node tests/home.browser.cjs
+```
+
+它会用本机 Edge（无头模式）真的打开页面，模拟鼠标长按、拖动、滑动，检查
+「图标能放到任意空位且空位保留 → 备份能往返 → 拖到左右边缘自动翻页或新建页 →
+滑动有中间动画帧 → 进出应用不会误入编辑模式」。没有装 Edge 时可以指定路径：
+
+```
+set EDGE_PATH=D:\你的路径\msedge.exe && node tests/home.browser.cjs
+```
+
 
 ---
 
@@ -89,7 +77,7 @@ assets/
 | **全机统一的扁平无色磨砂玻璃** | ✅ 小组件 / Dock / 应用面板共用一套参数，整份 CSS **零内阴影** |
 | **应用图标：薄磨砂玻璃** | ✅ 一整层无色半透明薄膜 + 一根极细亮边；纯扁平、无立体感、不做配色差异 |
 | 时间天气小组件（大号时间 + 日期星期 + 位置 + 天气） | ✅ 真实天气（按坐标自动获取） |
-| 桌面 | ✅ 聊天 / 美化 / 论坛；**长按图标进入编辑**：抖动、拖动排序、滑动式翻页、拖到屏幕边缘翻页或新建页面（最多 5 页） |
+| 桌面 | ✅ 聊天 / 美化 / 论坛；**长按图标进入编辑**：抖动、4 × 4 槽位自由摆放（保留空位，重叠时交换）、跟手滑动与平滑翻页、拖到屏幕边缘翻页或新建页面（最多 5 页）；布局随备份保存 |
 | Dock：世界书 / 角色集 / 用户 / 设置 | ✅ 可进入 |
 | 聊天 | ✅ **真实 AI 对话**：OpenAI 兼容接口、流式打字机输出、可随时停止；未配置时回退本地演示回复 |
 | 美化 | ✅ 6 套内置壁纸 + **添加自己的图片当壁纸**、**自定义应用图标**、Dock 名称开关、**应用名称显示开关**、状态栏电量调节 |
