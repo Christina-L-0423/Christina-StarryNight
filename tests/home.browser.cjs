@@ -127,16 +127,49 @@ async function boot() {
   await mouse('mouseReleased', chatIcon.x, chatIcon.y);
   await wait(800);
   assert.ok(await evaluate(`!!document.querySelector('.app-header')`), '聊天应用已打开');
-  await evaluate(`(() => { SN.store.state.chats.christina = [{ role: 'them', text: '这是一条特别特别长的聊天记录'.repeat(8) }]; return 1; })()`);
+  await evaluate(`(() => { SN.store.state.chats.christina = [{ role: 'them', text: '这是一条特别特别长的聊天记录'.repeat(8), ts: Date.now() }]; return 1; })()`);
   await wait(250);
   const preview = await evaluate(`(() => { const s=document.querySelector('.row__sub'); const c=document.querySelector('.row__chev'); if(!s||!c) return null; const sr=s.getBoundingClientRect(), cr=c.getBoundingClientRect(); return {len:s.textContent.length, display:getComputedStyle(s).display, gap:Math.round(cr.left-sr.right)}; })()`);
   assert.ok(preview, '会话列表里有预览行');
   assert.equal(preview.display, 'block', '预览必须是块级（行内元素上的省略号不生效）');
-  assert.ok(preview.len <= 25, '预览被截断到 24 字，实际 ' + preview.len);
+  assert.ok(preview.len <= 15, '预览被截短到 14 字，实际 ' + preview.len);
   assert.ok(preview.gap > 0, '预览与右边箭头不重叠，gap=' + preview.gap);
+
+  // 通栏 + 右上角时间：列表左右贴住屏幕边缘，行首行右侧显示 时:分。
+  const rowExtra = await evaluate(`(() => { const t=document.querySelector('.row__time'); const f=document.querySelector('.list--flush'); const body=document.querySelector('.app-body'); if(!t||!f||!body) return null; const fr=f.getBoundingClientRect(), br=body.getBoundingClientRect(); return { time:t.textContent, timeOk:/^\\d{1,2}:\\d{2}$/.test(t.textContent), leftDelta:Math.round(fr.left-br.left), widthDelta:Math.round(br.width-fr.width) }; })()`);
+  assert.ok(rowExtra, '会话行有「上次聊天时间」与通栏容器');
+  assert.ok(rowExtra.timeOk, '右上角显示 时:分，实际 ' + rowExtra.time);
+  assert.ok(Math.abs(rowExtra.leftDelta) <= 1 && Math.abs(rowExtra.widthDelta) <= 1, '列表左右顶格 ' + JSON.stringify(rowExtra));
+
+  // 点开对话：微信式时间分割线（首条消息上方显示 时:分）。
+  const rowRect = await evaluate(`(() => { const r=document.querySelector('.list--flush .row'); const b=r.getBoundingClientRect(); return {x:Math.round(b.left+b.width/2), y:Math.round(b.top+b.height/2)}; })()`);
+  await mouse('mousePressed', rowRect.x, rowRect.y);
+  await mouse('mouseReleased', rowRect.x, rowRect.y);
+  await wait(400);
+  const stamps = await evaluate(`(() => [...document.querySelectorAll('.chat__stamp')].map(function (e) { return e.textContent; }))()`);
+  assert.ok(stamps.length >= 1, '聊天里有时间分割线，实际 ' + JSON.stringify(stamps));
+  assert.ok(/^\d{1,2}:\d{2}$/.test(stamps[stamps.length - 1]), '分割线是 时:分 格式，实际 ' + stamps[stamps.length - 1]);
   await evaluate('SN.store.closeApp()');
   await wait(700);
-  console.log('PASS chat list preview truncated, never overlaps the chevron');
+  console.log('PASS chat list: flush edges, row time, 14-char preview, time stamps');
+
+  // 角色集：竖向居中角色卡 + 简介；角色编辑有「简介」字段；简介不进提示词。
+  const promptSrc = fs.readFileSync(path.join(root, 'assets/js/logic/prompt.js'), 'utf8');
+  assert.ok(!/\bintro\b/.test(promptSrc), 'prompt.js 不读取 intro（简介不会发给 AI）');
+  await evaluate(`SN.store.openApp('characters')`);
+  await wait(500);
+  const charUi = await evaluate(`(() => { const l=document.querySelector('.char-list'); const c=document.querySelector('.char-card'); const i=document.querySelector('.char-card__intro'); if(!l||!c||!i) return null; return { dir:getComputedStyle(l).flexDirection, name:c.querySelector('.char-card__name').textContent, introLen:i.textContent.length }; })()`);
+  assert.ok(charUi, '角色集渲染了角色卡');
+  assert.equal(charUi.dir, 'column', '角色卡竖向排列');
+  assert.ok(charUi.introLen > 0, '角色卡显示简介（' + charUi.name + '）');
+  await evaluate(`SN.store.openApp('characterEdit', { characterId: 'christina' })`);
+  await wait(500);
+  const editUi = await evaluate(`(() => { const labels=[...document.querySelectorAll('.field__label')].map(e=>e.textContent); const areas=[...document.querySelectorAll('.input--area')]; return { labels:labels, firstAreaDisabled: areas.length ? areas[0].disabled : null }; })()`);
+  assert.ok(editUi.labels.indexOf('简介') !== -1, '角色编辑页有「简介」字段，实际 ' + JSON.stringify(editUi.labels));
+  assert.equal(editUi.firstAreaDisabled, true, '官方角色（locked）的简介不可编辑');
+  await evaluate('SN.store.closeApp()');
+  await wait(500);
+  console.log('PASS characters view: vertical centered cards + intro field, intro never sent to AI');
 
   const first = (await slots())[0];
   await dropIcon(0, 15);

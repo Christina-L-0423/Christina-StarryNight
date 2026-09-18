@@ -257,7 +257,9 @@ window.SN = window.SN || {};
   /* quote 可选：引用回复时带上的那段小引用文字 */
   function pushMessage(characterId, role, text, quote) {
     if (!state.chats[characterId]) state.chats[characterId] = [];
-    const message = { role: role, text: text, time: timeStamp() };
+    /* ts：真实时间戳（毫秒）。聊天上方的微信式时间分割线、会话列表右上角的
+       「上次聊天时间」都靠它算；旧备份里的消息没有 ts，界面会自动退回显示 time 字符串 */
+    const message = { role: role, text: text, time: timeStamp(), ts: Date.now() };
     if (quote) message.quote = quote;
     state.chats[characterId].push(message);
   }

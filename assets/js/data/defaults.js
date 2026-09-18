@@ -31,6 +31,7 @@ window.SN = window.SN || {};
       id: "christina",
       name: "Christina",
       locked: true,
+      intro: "熬夜看星星的老朋友。说话温柔简短，偶尔一句关心，偶尔一点小调侃。",
       persona:
         "Christina，二十多岁，喜欢熬夜看星星，是用户的老朋友。说话温柔简短，偶尔关心一句，偶尔小小地调侃一下。",
       gradient: "linear-gradient(150deg, #8ea2ff, #c86bff)",
@@ -120,11 +121,18 @@ window.SN = window.SN || {};
      5) 上下文记忆（聊天记录）
         每条消息：{ role: "me" | "them", text, time, quote? }
      ------------------------------------------------------------ */
+  /* 示例聊天记录：ts 是相对「打开页面那一刻」的真实时间戳（毫秒），
+     这样演示对话看起来是刚刚聊过的；时间分割线和列表时间都读它。 */
+  const demoTs = Date.now();
   SN.defaults.chats = {
     christina: [
-      { role: "them", text: "又见面啦。今晚的星星很好看，想聊点什么？", time: "22:04" },
-      { role: "me", text: "刚忙完，有点累。", time: "22:06" },
-      { role: "them", text: "那就先别想工作的事，去阳台站一会儿吧。|||今晚的风应该挺舒服的。", time: "22:06" }
+      { role: "them", text: "又见面啦。今晚的星星很好看，想聊点什么？", ts: demoTs - 14 * 60000 },
+      { role: "me", text: "刚忙完，有点累。", ts: demoTs - 12 * 60000 },
+      {
+        role: "them",
+        text: "那就先别想工作的事，去阳台站一会儿吧。|||今晚的风应该挺舒服的。",
+        ts: demoTs - 12 * 60000
+      }
     ]
   };
 

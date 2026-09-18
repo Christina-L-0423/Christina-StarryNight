@@ -514,12 +514,6 @@
   padding: 0 22px 4px;
 }
 
-.home__edithint {
-  font-size: 11.5px;
-  color: rgba(255, 255, 255, 0.8);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-}
-
 .home__done {
   padding: 5px 16px;
   border-radius: 15px;

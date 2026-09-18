@@ -388,7 +388,6 @@
                 :class="{ 'is-active': pi === page }" @click="goPage(pi)"></button>
       </div>
       <div class="home__editbar" v-if="editing">
-        <span class="home__edithint">空位随意放 · 图标或小组件都能拖 · 拖到边缘翻页或新建</span>
         <button class="home__done" type="button" @click="finishEdit">完成</button>
       </div>
       <teleport to="body">

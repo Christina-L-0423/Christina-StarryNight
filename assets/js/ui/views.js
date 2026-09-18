@@ -50,9 +50,76 @@ window.SN = window.SN || {};
         const list = store.state.chats[id] || [];
         const last = list[list.length - 1];
         if (!last) return "还没有聊天记录，点进去说第一句话吧";
-        /* 会话列表只放一行预览：换行压成空格，超长截断（CSS 还会再补省略号） */
+        /* 会话列表只放一行预览：换行压成空格，超长截短到 14 字（CSS 还会再补省略号） */
         const oneLine = String(last.text || "").replace(/\s+/g, " ").trim();
-        return oneLine.length > 24 ? oneLine.slice(0, 24) + "…" : oneLine;
+        return oneLine.length > 14 ? oneLine.slice(0, 14) + "…" : oneLine;
+      }
+
+      /* ---------- 时间辅助（微信式） ---------- */
+      /* 消息的真实时间戳：旧备份里的消息没有 ts，只能退回界面上的 time 字符串 */
+      function msgTs(m) {
+        return m && typeof m.ts === "number" ? m.ts : 0;
+      }
+
+      function hmOf(ts) {
+        const d = new Date(ts);
+        const pad = function (n) {
+          return n < 10 ? "0" + n : String(n);
+        };
+        return pad(d.getHours()) + ":" + pad(d.getMinutes());
+      }
+
+      function startOfDay(ts) {
+        const d = new Date(ts);
+        d.setHours(0, 0, 0, 0);
+        return d.getTime();
+      }
+
+      /* 完整格式：同天只显示 时:分；昨天/一周内/更早自动带日期 */
+      function stampLabel(ts) {
+        const now = new Date();
+        const today0 = startOfDay(now.getTime());
+        const day0 = startOfDay(ts);
+        if (day0 === today0) return hmOf(ts);
+        if (today0 - day0 === 86400000) return "昨天 " + hmOf(ts);
+        if (today0 - day0 < 7 * 86400000) {
+          const week = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
+          return week[new Date(ts).getDay()] + " " + hmOf(ts);
+        }
+        const d = new Date(ts);
+        const base = d.getMonth() + 1 + "月" + d.getDate() + "日 " + hmOf(ts);
+        return d.getFullYear() === now.getFullYear() ? base : d.getFullYear() + "年" + base;
+      }
+
+      /* 聊天里每条消息上方的时间分割线：首条必显示；之后间隔超过 5 分钟才再显示一次 */
+      function stampFor(m, index) {
+        const ts = msgTs(m);
+        if (!ts) return "";
+        if (index > 0) {
+          const prev = msgTs(messages.value[index - 1]);
+          if (prev && ts - prev < 5 * 60000) return "";
+        }
+        return stampLabel(ts);
+      }
+
+      /* 会话列表右上角的「上次聊天时间」：短格式（今天 时:分 / 昨天 / 周X / M月D日） */
+      function lastTime(id) {
+        const list = store.state.chats[id] || [];
+        const last = list[list.length - 1];
+        if (!last) return "";
+        const ts = msgTs(last);
+        if (!ts) return last.time || "";
+        const today0 = startOfDay(Date.now());
+        const day0 = startOfDay(ts);
+        if (day0 === today0) return hmOf(ts);
+        if (today0 - day0 === 86400000) return "昨天";
+        if (today0 - day0 < 7 * 86400000) {
+          const week = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+          return week[new Date(ts).getDay()];
+        }
+        const d = new Date(ts);
+        const base = d.getMonth() + 1 + "月" + d.getDate() + "日";
+        return d.getFullYear() === new Date().getFullYear() ? base : d.getFullYear() + "年" + base;
       }
 
       function scrollToBottom() {
@@ -239,6 +306,8 @@ window.SN = window.SN || {};
         regenerate: regenerate,
         clearChat: clearChat,
         lastText: lastText,
+        stampFor: stampFor,
+        lastTime: lastTime,
         openChat: openChat,
         backToList: backToList,
         send: send,
@@ -257,11 +326,14 @@ window.SN = window.SN || {};
     template: `
       <div v-if="!activeCharacter">
         <p class="section-title">全部会话</p>
-        <div class="list">
+        <div class="list list--flush">
           <button class="row" type="button" v-for="c in characters" :key="c.id" @click="openChat(c.id)">
             <span class="avatar" :style="{ backgroundImage: c.avatar ? 'url(' + c.avatar + ')' : c.gradient }">{{ c.avatar ? "" : c.name.charAt(0) }}</span>
             <span class="row__main">
-              <span class="row__label">{{ c.name }}</span>
+              <span class="row__head">
+                <span class="row__label">{{ c.name }}</span>
+                <span class="row__time" v-if="lastTime(c.id)">{{ lastTime(c.id) }}</span>
+              </span>
               <span class="row__sub">{{ lastText(c.id) }}</span>
             </span>
             <sn-glyph class="row__chev" name="chevron-right" :size="18"></sn-glyph>
@@ -271,12 +343,15 @@ window.SN = window.SN || {};
 
       <div class="chat" v-else>
         <div class="chat__list">
-          <div class="bubble-row" v-for="(m, i) in messages" :key="i" :class="{ 'bubble-row--me': m.role === 'me' }">
-            <div class="bubble" :class="m.role === 'me' ? 'bubble--me' : 'bubble--them'">
-              <template v-if="m.text">{{ m.text }}</template>
-              <span v-else class="typing" aria-label="对方正在输入"><i></i><i></i><i></i></span>
+          <template v-for="(m, i) in messages" :key="i">
+            <div class="chat__stamp" v-if="stampFor(m, i)">{{ stampFor(m, i) }}</div>
+            <div class="bubble-row" :class="{ 'bubble-row--me': m.role === 'me' }">
+              <div class="bubble" :class="m.role === 'me' ? 'bubble--me' : 'bubble--them'">
+                <template v-if="m.text">{{ m.text }}</template>
+                <span v-else class="typing" aria-label="对方正在输入"><i></i><i></i><i></i></span>
+              </div>
             </div>
-          </div>
+          </template>
 
           <div class="empty" v-if="!messages.length">还没有消息，说点什么吧。</div>
 
@@ -823,6 +898,7 @@ window.SN = window.SN || {};
         const created = {
           id: "char_" + Date.now().toString(36),
           name: "新角色",
+          intro: "",
           persona: "",
           greeting: "你好呀，很高兴认识你。",
           gradient: gradients[store.state.characters.length % gradients.length],
@@ -840,11 +916,12 @@ window.SN = window.SN || {};
       };
     },
     template: `
-      <div class="card-grid">
-        <button class="tile" type="button" v-for="c in characters" :key="c.id" @click="editCharacter(c)">
+      <div class="char-list">
+        <button class="char-card" type="button" v-for="c in characters" :key="c.id" @click="editCharacter(c)">
           <span class="avatar avatar--lg" :style="{ backgroundImage: c.avatar ? 'url(' + c.avatar + ')' : c.gradient }">{{ c.avatar ? "" : c.name.charAt(0) }}</span>
-          <span class="tile__name">{{ c.name }}</span>
-          <span class="tile__desc" v-if="c.locked">官方设定 · 只能查看</span>
+          <span class="char-card__name">{{ c.name }}</span>
+          <span class="char-card__intro" v-if="c.intro">{{ c.intro }}</span>
+          <span class="char-card__intro char-card__intro--empty" v-else>{{ c.locked ? "官方设定 · 只能查看" : "还没有简介，点进去写一个吧" }}</span>
         </button>
       </div>
 
@@ -858,7 +935,7 @@ window.SN = window.SN || {};
   /* ============================================================
      5.5) 角色编辑：查看 / 修改角色卡
           - 官方角色（locked）只能看，输入框全部禁用并给出锁定说明
-          - 用户角色可以随便改：改名、人设、开场白、头像渐变
+          - 用户角色可以随便改：改名、简介、人设、开场白、头像渐变（简介只展示，不发给 AI）
      ============================================================ */
   SN.components["sn-character-edit-view"] = {
     name: "sn-character-edit-view",
@@ -1013,6 +1090,11 @@ window.SN = window.SN || {};
           <span class="field__label">名字</span>
           <input class="input" type="text" v-model="character.name" :disabled="locked" />
         </label>
+        <label class="field">
+          <span class="field__label">简介</span>
+          <textarea class="input input--area" rows="2" v-model="character.intro" :disabled="locked" placeholder="一句话介绍这个角色"></textarea>
+        </label>
+        <p class="field__hint">简介只用于角色集展示（头像下方那行小字），不会发给 AI。</p>
         <label class="field">
           <span class="field__label">人设</span>
           <textarea class="input input--area" rows="8" v-model="character.persona" :disabled="locked"></textarea>
