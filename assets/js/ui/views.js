@@ -49,7 +49,10 @@ window.SN = window.SN || {};
       function lastText(id) {
         const list = store.state.chats[id] || [];
         const last = list[list.length - 1];
-        return last ? last.text : "还没有聊天记录，点进去说第一句话吧";
+        if (!last) return "还没有聊天记录，点进去说第一句话吧";
+        /* 会话列表只放一行预览：换行压成空格，超长截断（CSS 还会再补省略号） */
+        const oneLine = String(last.text || "").replace(/\s+/g, " ").trim();
+        return oneLine.length > 24 ? oneLine.slice(0, 24) + "…" : oneLine;
       }
 
       function scrollToBottom() {

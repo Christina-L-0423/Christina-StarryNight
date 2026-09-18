@@ -120,11 +120,17 @@
 }
 
 .row__label {
+  /* 必须是块级：行内元素上的 overflow/text-overflow 不生效，长文本会压到右边的箭头上 */
+  display: block;
   font-size: 15px;
   font-weight: 500;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .row__sub {
+  display: block;
   margin-top: 3px;
   font-size: 12.5px;
   color: var(--text-3);

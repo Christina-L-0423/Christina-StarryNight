@@ -37,6 +37,18 @@
         return pages;
       }
       const layout = ref(normalize(store.state.settings.homeLayout));
+      /* 小组件位置：住在哪一页 + 在图标网格上方还是下方（全局，保证各页行列对齐） */
+      function readWidget(saved) {
+        const s = saved && typeof saved === "object" ? saved : {};
+        return { page: Math.max(0, Number(s.page) || 0), bottom: Boolean(s.bottom) };
+      }
+      const widget = ref(readWidget(store.state.settings.homeWidget));
+      function clampWidget() {
+        const last = Math.max(0, layout.value.length - 1);
+        if (widget.value.page > last) widget.value.page = last;
+        if (widget.value.page < 0) widget.value.page = 0;
+      }
+      clampWidget(); /* 备份里的小组件页号可能超过现在的页数，先夹到有效范围 */
       const page = ref(0);
       const editing = ref(false);
       const dragging = ref(null);
@@ -45,6 +57,8 @@
       const offset = ref(0);
       const following = ref(false);
       const rebasing = ref(false);
+      const animating = ref(false);
+      let moveTimer = null;
       let writing = false;
       let pointer = null;
       let lpTimer = null;
@@ -57,6 +71,7 @@
       function persist() {
         writing = true;
         store.state.settings.homeLayout = layout.value.map(function (p) { return p.slots.slice(); });
+        store.state.settings.homeWidget = { page: widget.value.page, bottom: widget.value.bottom };
         writing = false;
         if (store.persistNow) store.persistNow();
       }
@@ -79,23 +94,36 @@
         offset.value = 0;
         edgeBlocked = false;
       }
+      /* 翻页过渡期间给磨砂膜降级（见 phone.css 的 is-moving 说明） */
+      function startMove(duration) {
+        animating.value = true;
+        window.clearTimeout(moveTimer);
+        moveTimer = window.setTimeout(function () {
+          animating.value = false;
+        }, duration || 360);
+      }
       function goPage(i) {
-        page.value = Math.max(0, Math.min(layout.value.length - 1, i));
+        const next = Math.max(0, Math.min(layout.value.length - 1, i));
+        const changed = next !== page.value;
+        page.value = next;
         offset.value = 0;
         following.value = false;
         hover.value = null;
+        if (changed) startMove();
       }
       function finishEdit() {
         cancelGesture();
         editing.value = false;
         const current = layout.value[page.value];
+        const wPage = layout.value[widget.value.page];
         const kept = layout.value.filter(function (p) {
-          return p === current || p.slots.some(Boolean);
+          return p === current || p === wPage || p.slots.some(Boolean);
         });
         /* 保留当前页及其稳定 key，同步调整轨道坐标，不做跨多页的视觉跳动。 */
         rebasing.value = true;
         layout.value = kept;
         page.value = Math.max(0, kept.indexOf(current));
+        widget.value.page = Math.max(0, kept.indexOf(wPage));
         persist();
         releaseRebase();
       }
@@ -127,25 +155,47 @@
           transition: following.value || rebasing.value ? "none" : ""
         };
       });
+      const moving = computed(function () {
+        return following.value || rebasing.value || animating.value;
+      });
+      /* 拖动时跟着手指的「幽灵」：图标小、小组件是整行宽，偏移量不一样 */
+      const ghostStyle = computed(function () {
+        const d = dragging.value;
+        if (!d) return {};
+        return d.kind === "widget"
+          ? { left: d.x - 150 + "px", top: d.y - 52 + "px" }
+          : { left: d.x - 30 + "px", top: d.y - 30 + "px" };
+      });
       /* 图标、小组件和空白区域都可以开始横向手势。 */
       function pagerDown(e) {
         if (store.state.activeApp || pointer || e.isPrimary === false || (e.button && e.button !== 0)) return;
         clearLongPress();
         pointer = { id: e.pointerId, x: e.clientX, y: e.clientY, time: Date.now(), axis: null };
+        function hold(start) {
+          if (!pointer || store.state.activeApp) return;
+          editing.value = true;
+          dragging.value = start;
+          suppressUntil = Date.now() + 500;
+        }
+        /* 小组件：只有它所在的那一页能抓起 */
+        const band = e.target.closest && e.target.closest("[data-widget-band]");
+        if (band) {
+          const bpi = Number(band.dataset.widgetBand);
+          if (bpi !== page.value || widget.value.page !== bpi) return;
+          const start = { kind: "widget", id: "", page: bpi, index: -1, x: e.clientX, y: e.clientY };
+          if (editing.value) hold(start);
+          else lpTimer = window.setTimeout(function () { hold(start); }, 420);
+          return;
+        }
         const cell = e.target.closest && e.target.closest("[data-slot]");
         if (!cell) return;
         const pi = Number(cell.dataset.page);
         const index = Number(cell.dataset.index);
         const id = layout.value[pi].slots[index];
         if (!id || pi !== page.value) return;
-        function grab() {
-          if (!pointer || store.state.activeApp) return;
-          editing.value = true;
-          dragging.value = { id: id, page: pi, index: index, x: e.clientX, y: e.clientY };
-          suppressUntil = Date.now() + 500;
-        }
-        if (editing.value) grab();
-        else lpTimer = window.setTimeout(grab, 420);
+        const start = { kind: "app", id: id, page: pi, index: index, x: e.clientX, y: e.clientY };
+        if (editing.value) hold(start);
+        else lpTimer = window.setTimeout(function () { hold(start); }, 420);
       }
       function slotAt(x, y) {
         if (!pagerEl.value) return null;
@@ -153,9 +203,12 @@
         if (!grid) return null;
         const r = grid.getBoundingClientRect();
         const viewport = pagerEl.value.getBoundingClientRect();
-        if (x < viewport.left || x > viewport.right || y < r.top || y > r.bottom) return null;
+        /* 横向必须落在这一页里；纵向只要还在桌面区域内就按「最近的一行」算，
+           这样把图标丢到小组件那一格（网格上方）也不会变成丢不进去的死区 */
+        if (x < viewport.left || x > viewport.right || y < viewport.top || y > viewport.bottom) return null;
         const col = Math.max(0, Math.min(3, Math.floor((x - viewport.left) / (viewport.width / 4))));
-        const row = Math.max(0, Math.min(3, Math.floor((y - r.top) / (r.height / 4))));
+        const cy = Math.max(r.top + 1, Math.min(r.bottom - 1, y));
+        const row = Math.max(0, Math.min(3, Math.floor((cy - r.top) / (r.height / 4))));
         return { page: page.value, index: row * 4 + col };
       }
       function flipEdge(side) {
@@ -170,6 +223,8 @@
           rebasing.value = true;
           layout.value.unshift(makePage());
           dragging.value.page += 1;
+          /* 所有原有页的序号都往后挪了一位，小组件也要跟着挪，否则会「跳到新页上」 */
+          widget.value.page += 1;
           page.value += 1;
           releaseRebase(function () { goPage(0); });
         }
@@ -201,7 +256,8 @@
           if (e.cancelable) e.preventDefault();
           dragging.value.x = e.clientX;
           dragging.value.y = e.clientY;
-          hover.value = slotAt(e.clientX, e.clientY);
+          /* 小组件是整行宽的，不落到具体格子上，只按所在页 + 上下位置落位 */
+          hover.value = dragging.value.kind === "widget" ? null : slotAt(e.clientX, e.clientY);
           updateEdge(e.clientX, e.clientY);
           return;
         }
@@ -222,7 +278,14 @@
         clearLongPress();
         clearEdge();
         const d = dragging.value;
-        if (d) {
+        if (d && d.kind === "widget") {
+          /* 落在哪一页就住哪一页；落在屏幕上半 → 网格上方，下半 → 网格下方 */
+          const r = pagerEl.value ? pagerEl.value.getBoundingClientRect() : null;
+          widget.value.page = page.value;
+          if (r) widget.value.bottom = e.clientY > r.top + r.height / 2;
+          hover.value = null;
+          persist();
+        } else if (d) {
           const target = slotAt(e.clientX, e.clientY);
           if (target) {
             const source = layout.value[d.page].slots;
@@ -237,6 +300,7 @@
           const elapsed = Math.max(1, Date.now() - pointer.time);
           const turn = Math.abs(dx) > width * 0.2 || (Math.abs(dx) > 30 && Math.abs(dx) / elapsed > 0.45);
           goPage(page.value + (turn ? (dx < 0 ? 1 : -1) : 0));
+          startMove();
         }
         /* 手势结束后紧跟的合成 click 会落在手指抬起处的图标上，短暂拦掉以防误开应用 */
         if (d || pointer.axis) suppressUntil = Date.now() + 180;
@@ -254,7 +318,15 @@
         cancelGesture();
         editing.value = false;
         layout.value = normalize(saved);
+        widget.value = readWidget(store.state.settings.homeWidget);
+        clampWidget();
         goPage(0);
+      }, { deep: true, flush: "sync" });
+      /* 恢复出厂 / 导入备份后，小组件位置也要跟着回到设置里的值 */
+      watch(function () { return store.state.settings.homeWidget; }, function (saved) {
+        if (writing) return;
+        widget.value = readWidget(saved);
+        clampWidget();
       }, { deep: true, flush: "sync" });
       window.addEventListener("pointermove", onMove, { passive: false });
       window.addEventListener("pointerup", onUp);
@@ -263,6 +335,7 @@
       onBeforeUnmount(function () {
         disposed = true;
         cancelGesture();
+        window.clearTimeout(moveTimer);
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
         window.removeEventListener("pointercancel", onCancel);
@@ -271,6 +344,7 @@
       return {
         SLOTS: SLOTS, layout: layout, page: page, editing: editing,
         dragging: dragging, hover: hover, pagerEl: pagerEl, trackStyle: trackStyle,
+        widget: widget, moving: moving, ghostStyle: ghostStyle,
         showLabel: computed(function () { return store.state.settings.homeLabels; }),
         appById: appById, openApp: openApp, goPage: goPage,
         finishEdit: finishEdit, pagerDown: pagerDown
@@ -278,20 +352,31 @@
     },
     template: `
       <div class="home" @contextmenu.prevent @dragstart.prevent @pointerdown="pagerDown">
-        <sn-widget></sn-widget>
-        <div class="home__pager" ref="pagerEl" :class="{ 'is-editing': editing }">
+        <div class="home__pager" ref="pagerEl" :class="{ 'is-editing': editing, 'is-moving': moving }">
           <div class="home__track" :style="trackStyle">
             <div class="home__page" v-for="(p, pi) in layout" :key="p.key" :inert="pi !== page">
+              <!-- 小组件的位置：它所在的那一页显示小组件，其他页留出同样高度的空位，
+                   这样翻页时各行图标不会上下错位。位置（上/下）是全局的。 -->
+              <div class="home__widget-slot home__widget-slot--top" v-if="!widget.bottom"
+                   :data-widget-band="widget.page === pi ? pi : null"
+                   :class="{ 'is-holding': dragging && dragging.kind === 'widget' && widget.page === pi }">
+                <sn-widget v-if="widget.page === pi"></sn-widget>
+              </div>
               <div class="home__grid">
                 <div class="home__cell" v-for="i in SLOTS" :key="i" data-slot
                      :data-page="pi" :data-index="i - 1"
                      :class="{
                        'is-hover': hover && hover.page === pi && hover.index === i - 1,
-                       'is-source': dragging && dragging.page === pi && dragging.index === i - 1
+                       'is-source': dragging && dragging.kind === 'app' && dragging.page === pi && dragging.index === i - 1
                      }">
                   <sn-app-icon v-if="p.slots[i - 1]" :app="appById(p.slots[i - 1])"
                                :show-label="showLabel" @open="openApp"></sn-app-icon>
                 </div>
+              </div>
+              <div class="home__widget-slot home__widget-slot--bottom" v-if="widget.bottom"
+                   :data-widget-band="widget.page === pi ? pi : null"
+                   :class="{ 'is-holding': dragging && dragging.kind === 'widget' && widget.page === pi }">
+                <sn-widget v-if="widget.page === pi"></sn-widget>
               </div>
             </div>
           </div>
@@ -303,12 +388,14 @@
                 :class="{ 'is-active': pi === page }" @click="goPage(pi)"></button>
       </div>
       <div class="home__editbar" v-if="editing">
-        <span class="home__edithint">空位随意放 · 拖到边缘翻页或新建</span>
+        <span class="home__edithint">空位随意放 · 图标或小组件都能拖 · 拖到边缘翻页或新建</span>
         <button class="home__done" type="button" @click="finishEdit">完成</button>
       </div>
       <teleport to="body">
-        <div class="home__ghost" v-if="dragging" :style="{ left: (dragging.x - 30) + 'px', top: (dragging.y - 30) + 'px' }">
-          <sn-app-icon :app="appById(dragging.id)" :show-label="false"></sn-app-icon>
+        <div class="home__ghost" :class="{ 'home__ghost--widget': dragging && dragging.kind === 'widget' }"
+             v-if="dragging" :style="ghostStyle">
+          <sn-widget v-if="dragging.kind === 'widget'"></sn-widget>
+          <sn-app-icon v-else :app="appById(dragging.id)" :show-label="false"></sn-app-icon>
         </div>
       </teleport>
     `

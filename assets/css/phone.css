@@ -176,6 +176,26 @@
   flex-shrink: 0;
 }
 
+/* 小组件栅位：每一页都留出同样的一格（只有小组件所在那页真的放小组件），
+   这样翻页时图标行列不会上下错位。106px ≈ 小组件自身高度。 */
+.home__widget-slot {
+  flex: none;
+  height: 106px;
+}
+
+.home__widget-slot--top {
+  margin-bottom: 24px;
+}
+
+.home__widget-slot--bottom {
+  margin-top: 24px;
+}
+
+/* 小组件被抓起时，原位置留个淡影 */
+.home__widget-slot.is-holding {
+  opacity: 0.35;
+}
+
 /* 隐藏滚动条，更像原生 App */
 .home::-webkit-scrollbar,
 .app-body::-webkit-scrollbar {
@@ -240,7 +260,8 @@
 
 /* ---------- 应用图标 ---------- */
 .home__grid {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   grid-template-rows: repeat(4, minmax(84px, 1fr));
@@ -314,6 +335,18 @@
   background-color: transparent;
   border-color: transparent;
   box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* ---------- 翻页过程中的「静态薄膜」----------
+   图标在一个正在做 transform 动画的容器里时，浏览器会一帧一帧重新采样背景模糊，
+   真机上会出现「磨砂膜先不见、图标像变淡再慢慢回来」。
+   所以滑动 / 翻页期间先不采样背景模糊，只保留原来那层薄膜；停下立刻换回磨砂玻璃。
+   （壁纸在图标附近是平滑渐变，模糊与否的亮度差 <1/255，肉眼看不出变化——
+     实测：静止 71.37，去掉模糊 71.4。） */
+.home__pager.is-moving .app-icon__box,
+.home__pager.is-moving .widget {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
@@ -429,9 +462,9 @@
 
 /* 滑动式翻页：一条轨道放所有页，transform 切换，边缘留白隐藏相邻页 */
 .home__pager {
-  flex: 1 0 336px;
-  min-height: 336px;
-  margin-top: 24px;
+  /* 最小高度 = 小组件 106 + 间距 24 + 四行图标 336；屏幕更高时自动长高 */
+  flex: 1 0 466px;
+  min-height: 466px;
   overflow: hidden;
   border-radius: 8px;
   touch-action: none;
@@ -447,6 +480,8 @@
 .home__page {
   flex: 0 0 100%;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 页点：固定在桌面底部、Dock 栏上方（在 .home 滚动区之外，不随内容滚动） */
@@ -504,6 +539,12 @@
   pointer-events: none;
   transform: scale(1.08);
   filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.35));
+}
+
+/* 小组件整行宽，幽灵也跟着变宽 */
+.home__ghost--widget {
+  width: 300px;
+  transform: scale(1.02);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -46,13 +46,29 @@ async function slots() {
   return evaluate(`(() => { const track=document.querySelector('.home__track'); const m=new DOMMatrix(getComputedStyle(track).transform); const w=document.querySelector('.home__pager').getBoundingClientRect().width; const pg=Math.max(0,Math.round(-m.m41/w)); const grid=document.querySelectorAll('.home__page')[pg].querySelector('.home__grid'); return [...grid.querySelectorAll('[data-slot]')].map(el=>{const l=el.querySelector('.app-icon__label');return l?l.textContent.trim():null;}); })()`);
 }
 async function boot() {
+  const vendor = path.resolve(__dirname, 'vendor');
   server = http.createServer((req, res) => {
-    const rel = req.url.split('?')[0] === '/' ? '/index.html' : req.url.split('?')[0];
+    const url = req.url.split('?')[0];
+    if (url.startsWith('/vendor/')) {
+      fs.readFile(path.join(vendor, url.slice('/vendor/'.length)), (err, data) => {
+        if (err) { res.writeHead(404).end(); return; }
+        res.setHeader('Content-Type', 'text/javascript');
+        res.end(data);
+      });
+      return;
+    }
+    const rel = url === '/' ? '/index.html' : url;
     const file = path.resolve(root, '.' + decodeURIComponent(rel));
     if (!file.startsWith(root + path.sep)) { res.writeHead(403).end(); return; }
     fs.readFile(file, (err, data) => {
       if (err) { res.writeHead(404).end(); return; }
-      res.setHeader('Content-Type', ({ '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' })[path.extname(file)] || 'application/octet-stream');
+      const type = ({ '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' })[path.extname(file)] || 'application/octet-stream';
+      res.setHeader('Content-Type', type);
+      /* 用本地 Vue 顶掉 CDN：CDN 偶发 ERR_CONNECTION_CLOSED 会让整轮测试假失败（Vue is not defined） */
+      if (type === 'text/html') {
+        res.end(String(data).replace(/https:\/\/cdn\.jsdelivr\.net\/npm\/vue@3\/dist\/vue\.global\.prod\.js/g, '/vendor/vue.global.prod.js'));
+        return;
+      }
       res.end(data);
     });
   });
@@ -104,6 +120,23 @@ async function boot() {
   const size = await evaluate(`(() => { const g=document.querySelector('.home__grid').getBoundingClientRect(); const h=[...document.querySelectorAll('.home__page')[0].querySelectorAll('[data-slot]')].map(el=>el.getBoundingClientRect().height); return {grid:g.height,min:Math.min.apply(null,h)}; })()`);
   assert.ok(size.grid >= 336 && size.min >= 84, JSON.stringify(size));
   console.log('PASS boot: 4x4 grid, every row usable, all apps rendered');
+
+  // 会话列表：超长预览必须截断成一行，不能压到右边箭头上（用户上报的 bug）。
+  const chatIcon = await cell(0);
+  await mouse('mousePressed', chatIcon.x, chatIcon.y);
+  await mouse('mouseReleased', chatIcon.x, chatIcon.y);
+  await wait(800);
+  assert.ok(await evaluate(`!!document.querySelector('.app-header')`), '聊天应用已打开');
+  await evaluate(`(() => { SN.store.state.chats.christina = [{ role: 'them', text: '这是一条特别特别长的聊天记录'.repeat(8) }]; return 1; })()`);
+  await wait(250);
+  const preview = await evaluate(`(() => { const s=document.querySelector('.row__sub'); const c=document.querySelector('.row__chev'); if(!s||!c) return null; const sr=s.getBoundingClientRect(), cr=c.getBoundingClientRect(); return {len:s.textContent.length, display:getComputedStyle(s).display, gap:Math.round(cr.left-sr.right)}; })()`);
+  assert.ok(preview, '会话列表里有预览行');
+  assert.equal(preview.display, 'block', '预览必须是块级（行内元素上的省略号不生效）');
+  assert.ok(preview.len <= 25, '预览被截断到 24 字，实际 ' + preview.len);
+  assert.ok(preview.gap > 0, '预览与右边箭头不重叠，gap=' + preview.gap);
+  await evaluate('SN.store.closeApp()');
+  await wait(700);
+  console.log('PASS chat list preview truncated, never overlaps the chevron');
 
   const first = (await slots())[0];
   await dropIcon(0, 15);
@@ -166,11 +199,50 @@ async function boot() {
   assert.equal((await slots())[0], iconLabel);
   console.log('PASS left edge inserts a page before the current one');
 
+  // 小组件：编辑模式里也能拖 —— 拖到下半屏移到网格下方，拖到边缘跟着换页，位置随备份走。
+  const widgetPage = () => evaluate(`(() => { const w=document.querySelector('.home__widget-slot .widget'); if(!w) return -1; return [...document.querySelectorAll('.home__page')].indexOf(w.closest('.home__page')); })()`);
+  const bandCenter = () => evaluate(`(() => { const b=document.querySelector('[data-widget-band]'); if(!b) return null; const r=b.getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2}; })()`);
+  const wp = await widgetPage();
+  assert.ok(wp >= 0, '小组件在某一页上');
+  await evaluate(`document.querySelectorAll('.home__dot')[${wp}].click()`);
+  await wait(450);
+  assert.equal(await evaluate(`document.querySelectorAll('.home__widget-slot').length`), await evaluate(`document.querySelectorAll('.home__page').length`), '每一页都留出小组件的位置（翻页时行列不错位）');
+  const bandTop = await bandCenter();
+  await mouse('mousePressed', bandTop.x, bandTop.y);
+  await wait(470);
+  assert.equal(await evaluate(`document.querySelectorAll('.home__ghost--widget').length`), 1, '小组件被抓起（跟手幽灵出现）');
+  const lower = await evaluate(`(() => { const r=document.querySelector('.home__pager').getBoundingClientRect(); return {x:r.x+r.width/2, y:r.bottom-20}; })()`);
+  await mouse('mouseMoved', lower.x, lower.y);
+  await mouse('mouseReleased', lower.x, lower.y);
+  await wait(200);
+  assert.equal(await evaluate(`SN.store.snapshot().settings.homeWidget.bottom`), true, '落在下半屏 → 记到网格下方');
+  assert.ok(await evaluate(`!!document.querySelector('.home__widget-slot--bottom .widget')`), '小组件确实画在下方那一格');
+  console.log('PASS widget drags below the icon grid');
+
+  const bandBottom = await bandCenter();
+  const edgeW = await evaluate(`(() => { const r=document.querySelector('.home__pager').getBoundingClientRect(); return {x:r.right-8,y:r.bottom-20}; })()`);
+  const before = await evaluate(`SN.store.snapshot().settings.homeWidget.page`);
+  await mouse('mousePressed', bandBottom.x, bandBottom.y);
+  await wait(470);
+  await mouse('mouseMoved', edgeW.x, edgeW.y);
+  await wait(700);
+  await mouse('mouseReleased', edgeW.x, edgeW.y);
+  await wait(200);
+  assert.equal(await evaluate(`SN.store.snapshot().settings.homeWidget.page`), before + 1, '小组件跟着翻页换了页');
+  assert.equal(await widgetPage(), before + 1, '小组件画在新的一页上');
+  console.log('PASS widget moves to another page via the edge');
+
   // 编辑模式下点图标不打开应用；按「完成」退出后再点才会打开（用户上报的第 2 个 bug）。
   await evaluate(`document.querySelector('.home__done').click()`);
   await wait(400);
   assert.equal(await evaluate(`document.querySelectorAll('.home__pager.is-editing').length`), 0);
-  const target = await cell(0);
+  /* 找到「有图标的那一页」，再点它上面的图标（小组件可能落在没有图标的那一页上） */
+  const pWithIcon = await evaluate(`SN.store.snapshot().settings.homeLayout.findIndex(function (p) { return Array.isArray(p) && p.some(Boolean); })`);
+  assert.ok(pWithIcon >= 0, '存在带图标的页面');
+  await evaluate(`document.querySelectorAll('.home__dot')[${pWithIcon}].click()`);
+  await wait(450);
+  const iconIndex = await evaluate(`SN.store.snapshot().settings.homeLayout[${pWithIcon}].findIndex(Boolean)`);
+  const target = await cell(iconIndex);
   await mouse('mousePressed', target.x, target.y);
   await mouse('mouseReleased', target.x, target.y);
   await wait(650);
