@@ -194,6 +194,19 @@
   color: var(--text-3);
 }
 
+/* 聊天列表顶部的搜索栏（微信同位置）：贴住通栏列表 */
+.chat-search {
+  margin: 0 0 10px;
+}
+
+.chat-search .input {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: transparent;
+  border-radius: 10px;
+  padding: 9px 13px;
+  font-size: 14px;
+}
+
 /* 会话列表通栏：左右顶格贴住屏幕边缘（负外边距抵消 .app-body 的 18px 侧留白，
    同时去掉两侧圆角和边线，只保留上下 hairline——微信式通栏列表） */
 .list--flush {

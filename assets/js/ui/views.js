@@ -9,7 +9,7 @@ window.SN = window.SN || {};
 (function (SN) {
   "use strict";
 
-  const { ref, computed, nextTick } = Vue;
+  const { ref, computed, watch, nextTick } = Vue;
 
   /* 还没配置 API 时的本地演示回复（保证不配置也能玩） */
   const LOCAL_REPLY =
@@ -30,8 +30,19 @@ window.SN = window.SN || {};
       const draft = ref("");
       const sending = ref(false);
 
+      /* 聊天列表搜索：按角色名里含的字过滤会话，空 = 显示全部 */
+      const search = ref("");
+
       const characters = computed(function () {
         return store.state.characters;
+      });
+
+      const filteredCharacters = computed(function () {
+        const q = search.value.trim().toLowerCase();
+        if (!q) return characters.value;
+        return characters.value.filter(function (c) {
+          return String(c.name || "").toLowerCase().indexOf(q) !== -1;
+        });
       });
 
       const activeCharacter = computed(function () {
@@ -293,6 +304,8 @@ window.SN = window.SN || {};
 
       return {
         characters: characters,
+        filteredCharacters: filteredCharacters,
+        search: search,
         activeCharacter: activeCharacter,
         messages: messages,
         draft: draft,
@@ -326,8 +339,11 @@ window.SN = window.SN || {};
     template: `
       <div v-if="!activeCharacter">
         <p class="section-title">全部会话</p>
+        <label class="field chat-search">
+          <input class="input" v-model="search" type="text" placeholder="搜索角色名" />
+        </label>
         <div class="list list--flush">
-          <button class="row" type="button" v-for="c in characters" :key="c.id" @click="openChat(c.id)">
+          <button class="row" type="button" v-for="c in filteredCharacters" :key="c.id" @click="openChat(c.id)">
             <span class="avatar" :style="{ backgroundImage: c.avatar ? 'url(' + c.avatar + ')' : c.gradient }">{{ c.avatar ? "" : c.name.charAt(0) }}</span>
             <span class="row__main">
               <span class="row__head">
@@ -339,6 +355,7 @@ window.SN = window.SN || {};
             <sn-glyph class="row__chev" name="chevron-right" :size="18"></sn-glyph>
           </button>
         </div>
+        <p class="empty" v-if="!filteredCharacters.length && search.trim()">没有找到名字里含「{{ search.trim() }}」的会话</p>
       </div>
 
       <div class="chat" v-else>
@@ -906,7 +923,7 @@ window.SN = window.SN || {};
         };
         store.state.characters.push(created);
         if (store.persistNow) store.persistNow();
-        store.openApp("characterEdit", { characterId: created.id });
+        store.openApp("characterEdit", { characterId: created.id, fresh: true });
       }
 
       return {
@@ -947,6 +964,10 @@ window.SN = window.SN || {};
       const characterId = computed(function () {
         return (store.state.appParams || {}).characterId || "";
       });
+      /* 刚建的新角色：第一份草稿直接算「未保存」，中途退出就当不要了 */
+      const fresh = computed(function () {
+        return Boolean((store.state.appParams || {}).fresh);
+      });
 
       const character = computed(function () {
         const list = store.state.characters;
@@ -970,9 +991,58 @@ window.SN = window.SN || {};
         "linear-gradient(150deg, #7ee0ff, #4a6bff)"
       ];
 
+      /* 草稿制编辑：改动先落在草稿上，底部「保存」才写回角色数据；不保存就离开 = 丢弃 */
+      const draft = ref(null);
+
+      function fillDraft() {
+        const c = character.value;
+        if (!c) {
+          draft.value = null;
+          return;
+        }
+        draft.value = {
+          name: c.name || "",
+          intro: c.intro || "",
+          persona: c.persona || "",
+          greeting: c.greeting || "",
+          gradient: c.gradient || gradients[0],
+          avatar: c.avatar || ""
+        };
+      }
+
       function setGradient(value) {
-        if (locked.value || !character.value) return;
-        character.value.gradient = value;
+        if (locked.value || !draft.value) return;
+        draft.value.gradient = value;
+      }
+
+      const dirty = computed(function () {
+        const c = character.value;
+        const d = draft.value;
+        if (!c || !d) return false;
+        if (fresh.value) return true; /* 新建角色：保存之前都算没保存 */
+        return (
+          d.name !== (c.name || "") ||
+          d.intro !== (c.intro || "") ||
+          d.persona !== (c.persona || "") ||
+          d.greeting !== (c.greeting || "") ||
+          d.gradient !== c.gradient ||
+          d.avatar !== (c.avatar || "")
+        );
+      });
+
+      function saveEdits() {
+        const c = character.value;
+        const d = draft.value;
+        if (!c || !d || locked.value) return;
+        c.name = d.name.trim() || c.name;
+        c.intro = d.intro.trim();
+        c.persona = d.persona;
+        c.greeting = d.greeting;
+        c.gradient = d.gradient;
+        c.avatar = d.avatar;
+        if (store.persistNow) store.persistNow();
+        store.state.appParams = null; /* 保存后不再是「新角色」状态 */
+        fillDraft();
       }
 
       /* 开场白改了就重新出现在聊天里：清掉这个角色的聊天记录 */
@@ -1012,15 +1082,14 @@ window.SN = window.SN || {};
 
       /* 头像图片：压缩到 192px 存在角色数据里，随备份一起走 */
       function pickAvatar(event) {
-        if (locked.value || !character.value) return;
+        if (locked.value || !draft.value) return;
         const input = event && event.target;
         const file = input && input.files && input.files[0];
         if (!file) return;
         SN.mediaStore
           .processImageFile(file, 192)
           .then(function (dataUrl) {
-            character.value.avatar = dataUrl;
-            if (store.persistNow) store.persistNow();
+            if (draft.value) draft.value.avatar = dataUrl;
           })
           .catch(function (err) {
             console.warn("[StarryNight] 头像处理失败：", err);
@@ -1029,16 +1098,21 @@ window.SN = window.SN || {};
       }
 
       function removeAvatar() {
-        if (locked.value || !character.value) return;
-        character.value.avatar = "";
-        if (store.persistNow) store.persistNow();
+        if (locked.value || !draft.value) return;
+        draft.value.avatar = "";
       }
+
+      /* 切换到哪个角色，就为它重建一份草稿 */
+      watch(characterId, fillDraft, { immediate: true, flush: "sync" });
 
       return {
         character: character,
         locked: locked,
+        draft: draft,
+        dirty: dirty,
         gradients: gradients,
         setGradient: setGradient,
+        saveEdits: saveEdits,
         resetChat: resetChat,
         removeCharacter: removeCharacter,
         pickAvatar: pickAvatar,
@@ -1049,7 +1123,33 @@ window.SN = window.SN || {};
         }),
         navIsSub: true,
         navBack: function () {
-          store.openApp("characters");
+          function go() {
+            store.openApp("characters");
+          }
+          /* 有没保存的修改：先问一声。新建的角色没保存 = 直接不要了（删掉） */
+          if (dirty.value) {
+            const c = character.value;
+            SN.ui
+              .confirm({
+                message: fresh.value
+                  ? "还没保存这个新角色，退出后它不会被保留。确定离开吗？"
+                  : "有未保存的修改，退出后将不生效。确定离开吗？",
+                confirmText: fresh.value ? "丢弃" : "不保存离开",
+                danger: true
+              })
+              .then(function (ok) {
+                if (!ok) return;
+                if (fresh.value && c) {
+                  store.state.characters = store.state.characters.filter(function (x) {
+                    return x.id !== c.id;
+                  });
+                  if (store.persistNow) store.persistNow();
+                }
+                go();
+              });
+            return;
+          }
+          go();
         },
         navBackLabel: "角色集"
       };
@@ -1059,17 +1159,19 @@ window.SN = window.SN || {};
 
       <div v-else>
         <div class="card profile">
-          <span class="avatar avatar--lg" :style="{ backgroundImage: character.avatar ? 'url(' + character.avatar + ')' : character.gradient }">
-            {{ character.avatar ? "" : character.name.charAt(0) }}
+          <span class="avatar avatar--lg" :style="{ backgroundImage: draft.avatar ? 'url(' + draft.avatar + ')' : draft.gradient }">
+            {{ draft.avatar ? "" : draft.name.charAt(0) }}
           </span>
-          <p class="profile__name">{{ character.name }}</p>
-          <p class="profile__sign">{{ locked ? "官方设定 · 不可修改" : "自定义角色" }}</p>
+          <p class="profile__name">{{ draft.name }}</p>
+          <!-- 名字下面这行小字 = 角色简介（官方角色锁死时显示官方提示） -->
+          <p class="profile__sign">{{ locked ? "官方设定 · 只能查看" : (draft.intro || "还没有简介") }}</p>
+          <p class="field__hint" v-if="dirty" :class="{ 'is-ok': false }">有未保存的修改 — 点下方「保存」才会生效</p>
         </div>
 
         <p class="section-title">头像配色</p>
         <div class="chips">
           <button class="grad-dot" type="button" v-for="g in gradients" :key="g"
-            :class="{ 'is-active': character.gradient === g, 'is-locked': locked }"
+            :class="{ 'is-active': draft.gradient === g, 'is-locked': locked }"
             :style="{ backgroundImage: g }" @click="setGradient(g)"></button>
         </div>
 
@@ -1077,10 +1179,10 @@ window.SN = window.SN || {};
           <p class="section-title">头像图片</p>
           <div class="btn-row">
             <label class="mini-btn">
-              {{ character.avatar ? "换一张图片" : "选择图片" }}
+              {{ draft.avatar ? "换一张图片" : "选择图片" }}
               <input type="file" accept="image/*" hidden @change="pickAvatar($event)" />
             </label>
-            <button class="mini-btn mini-btn--plain" type="button" v-if="character.avatar" @click="removeAvatar">移除图片</button>
+            <button class="mini-btn mini-btn--plain" type="button" v-if="draft.avatar" @click="removeAvatar">移除图片</button>
           </div>
           <p class="field__hint">会自动压缩后存在本机，并随备份文件一起导出；移除图片就回到上面的配色头像。</p>
         </template>
@@ -1088,24 +1190,29 @@ window.SN = window.SN || {};
         <p class="section-title">角色设定</p>
         <label class="field">
           <span class="field__label">名字</span>
-          <input class="input" type="text" v-model="character.name" :disabled="locked" />
+          <input class="input" type="text" v-model="draft.name" :disabled="locked" />
         </label>
         <label class="field">
           <span class="field__label">简介</span>
-          <textarea class="input input--area" rows="2" v-model="character.intro" :disabled="locked" placeholder="一句话介绍这个角色"></textarea>
+          <textarea class="input input--area" rows="2" v-model="draft.intro" :disabled="locked" placeholder="一句话介绍这个角色"></textarea>
         </label>
-        <p class="field__hint">简介只用于角色集展示（头像下方那行小字），不会发给 AI。</p>
+        <p class="field__hint">简介只用于角色集展示（名字下面那行小字），不会发给 AI。</p>
         <label class="field">
           <span class="field__label">人设</span>
-          <textarea class="input input--area" rows="8" v-model="character.persona" :disabled="locked"></textarea>
+          <textarea class="input input--area" rows="8" v-model="draft.persona" :disabled="locked"></textarea>
         </label>
         <label class="field">
           <span class="field__label">开场白</span>
-          <textarea class="input input--area" rows="3" v-model="character.greeting" :disabled="locked"></textarea>
+          <textarea class="input input--area" rows="3" v-model="draft.greeting" :disabled="locked"></textarea>
         </label>
         <p class="field__hint" v-if="locked">
           这个角色由官方统一维护，只能查看、不能修改；每次打开都会自动同步到最新设定。
         </p>
+
+        <div class="btn-row" v-if="!locked">
+          <button class="btn" type="button" :disabled="!dirty" @click="saveEdits">{{ dirty ? "保存修改" : "已保存" }}</button>
+        </div>
+        <p class="field__hint" v-if="!locked">不点保存的话，退出这页后修改不会生效。</p>
 
         <div class="btn-row">
           <button class="btn" type="button" @click="resetChat">重置这个角色的聊天</button>
@@ -1125,54 +1232,186 @@ window.SN = window.SN || {};
     props: { app: { type: Object, default: null } },
     setup: function () {
       const store = SN.store;
-      const user = store.state.user;
-
-      const stats = computed(function () {
-        const chats = store.state.chats;
-        const messageCount = Object.keys(chats).reduce(function (sum, key) {
-          return sum + (chats[key] ? chats[key].length : 0);
-        }, 0);
-        return {
-          characters: store.state.characters.length,
-          entries: store.state.worldbook.length,
-          messages: messageCount
-        };
+      const masks = computed(function () {
+        return store.state.masks;
+      });
+      const activeMaskId = computed(function () {
+        return store.state.activeMaskId || "";
       });
 
+      /* 与角色集一致的竖排卡片配色（新建时默认第一支） */
+      const gradients = [
+        "linear-gradient(150deg, #7e8cff, #d174ff)",
+        "linear-gradient(150deg, #5ee7c4, #2f8fd6)",
+        "linear-gradient(150deg, #ffd479, #ff7a59)",
+        "linear-gradient(150deg, #ff9ec4, #b06bff)",
+        "linear-gradient(150deg, #7ee0ff, #4a6bff)"
+      ];
+
+      /* 编辑哪个面具；"" = 新建草稿；null 状态 = 列表页 */
+      const editId = ref("");
+
+      /* 编辑中的草稿：底部「保存」前不落库，退出不保存 */
+      const draftForm = ref(null);
+
+      function openEdit(id) {
+        const target = masks.value.filter(function (m) { return m.id === id; })[0];
+        if (!target) return;
+        draftForm.value = {
+          name: target.name || "",
+          persona: target.persona || "",
+          gradient: target.gradient || gradients[0],
+          locked: Boolean(target.locked)
+        };
+        editId.value = id;
+      }
+
+      /* 新建面具：只造草稿，点保存才进列表 */
+      function createDraft() {
+        draftForm.value = { name: "", persona: "", gradient: gradients[0], locked: false };
+        editId.value = "";
+      }
+
+      function pickGradient(value) {
+        if (draftForm.value) draftForm.value.gradient = value;
+      }
+
+      function saveDraft() {
+        const form = draftForm.value;
+        if (!form || !form.name.trim()) return;
+        const name = form.name.trim();
+        const persona = form.persona.trim();
+        const gradient = form.gradient || gradients[0];
+        if (editId.value) {
+          const target = masks.value.filter(function (m) { return m.id === editId.value; })[0];
+          if (target) {
+            target.name = name;
+            target.persona = persona;
+            target.gradient = gradient;
+          }
+        } else {
+          const fresh = { id: "mask_" + Date.now(), name: name, persona: persona, gradient: gradient, locked: false };
+          masks.value.push(fresh);
+          /* 新建的面具直接启用，不用再找一遍 */
+          store.state.activeMaskId = fresh.id;
+        }
+        if (store.persistNow) store.persistNow();
+        draftForm.value = null;
+        editId.value = "";
+      }
+
+      function removeMask() {
+        const id = editId.value;
+        const target = masks.value.filter(function (m) { return m.id === id; })[0];
+        if (!target) return;
+        SN.ui
+          .confirm({
+            message: "删除「" + target.name + "」这个面具？",
+            confirmText: "删除",
+            danger: true
+          })
+          .then(function (ok) {
+            if (!ok) return;
+            store.state.masks = masks.value.filter(function (m) { return m.id !== id; });
+            if (store.state.activeMaskId === id) {
+              store.state.activeMaskId = store.state.masks.length ? store.state.masks[0].id : "";
+            }
+            if (store.persistNow) store.persistNow();
+            draftForm.value = null;
+            editId.value = "";
+          });
+      }
+
+      /* 应用此面具：AI 看到的用户名字（{{user}}）与「用户设定」段都换成它 */
+      function applyMask(id) {
+        store.state.activeMaskId = id;
+        if (store.persistNow) store.persistNow();
+      }
+
+      const editingMask = computed(function () {
+        return editId.value ? masks.value.filter(function (m) { return m.id === editId.value; })[0] || null : null;
+      });
+
+      /* 头部导航：进编辑页时标题显示面具名，返回键回列表（自动丢掉未保存的草稿） */
       return {
-        user: user,
-        stats: stats
+        masks: masks,
+        activeMaskId: activeMaskId,
+        editId: editId,
+        editingMask: editingMask,
+        draftForm: draftForm,
+        gradients: gradients,
+        openEdit: openEdit,
+        createDraft: createDraft,
+        pickGradient: pickGradient,
+        saveDraft: saveDraft,
+        removeMask: removeMask,
+        applyMask: applyMask,
+        navTitle: computed(function () {
+          return draftForm.value ? (editId.value ? (editingMask.value ? editingMask.value.name : "") : "新建面具") : "";
+        }),
+        navIsSub: computed(function () {
+          return Boolean(draftForm.value);
+        }),
+        navBack: function () {
+          draftForm.value = null;
+          editId.value = "";
+        },
+        navBackLabel: "面具"
       };
     },
     template: `
-      <div class="card profile">
-        <span class="avatar avatar--lg" :style="{ backgroundImage: user.gradient }">{{ user.name.charAt(0) }}</span>
-        <p class="profile__name">{{ user.name }}</p>
-        <p class="profile__sign">{{ user.signature }}</p>
+      <!-- 面具列表：与角色集一致的竖排卡片（头像 → 名字 → 设定），居中 -->
+      <div v-if="!draftForm">
+        <div class="char-list">
+          <button class="char-card" type="button" v-for="m in masks" :key="m.id" @click="openEdit(m.id)">
+            <span class="avatar avatar--xl" :style="{ backgroundImage: m.gradient }">{{ (m.name || "面").charAt(0) }}</span>
+            <span class="char-card__name">
+              {{ m.name }}
+              <span class="badge badge--on" v-if="m.id === activeMaskId">使用中</span>
+            </span>
+            <span class="char-card__intro">{{ m.persona || "还没有写设定" }}</span>
+          </button>
+        </div>
+        <p class="field__hint">应用哪个面具，AI 看到的「我是谁」就是哪个：名字与用户设定都会跟着换。</p>
+
+        <div class="btn-row">
+          <button class="btn" type="button" @click="createDraft">＋新建面具</button>
+        </div>
       </div>
 
-      <p class="section-title">资料</p>
-      <label class="field">
-        <span class="field__label">昵称</span>
-        <input class="input" v-model="user.name" type="text" />
-      </label>
-      <label class="field">
-        <span class="field__label">签名</span>
-        <input class="input" v-model="user.signature" type="text" />
-      </label>
-      <p class="section-title">统计</p>
-      <div class="list">
-        <div class="row">
-          <span class="row__main"><span class="row__label">角色</span></span>
-          <span class="row__value">{{ stats.characters }} 位</span>
+      <!-- 面具编辑：草稿制，底部「保存」才生效，返回键丢弃未保存的修改 -->
+      <div v-else>
+        <span class="avatar avatar--xl profile__avatar" :style="{ backgroundImage: draftForm.gradient || gradients[0] }">
+          {{ (draftForm.name || "面").charAt(0) }}
+        </span>
+
+        <div class="profile__swatches">
+          <button v-for="g in gradients" :key="g" type="button" class="profile__swatch"
+                  :class="{ 'is-active': draftForm.gradient === g }" :style="{ backgroundImage: g }"
+                  :aria-label="'配色 ' + g" @click="pickGradient(g)"></button>
         </div>
-        <div class="row">
-          <span class="row__main"><span class="row__label">世界书条目</span></span>
-          <span class="row__value">{{ stats.entries }} 条</span>
+
+        <label class="field">
+          <span class="field__label">面具名字</span>
+          <input class="input" v-model="draftForm.name" type="text" placeholder="例如 星旅人" />
+        </label>
+        <label class="field">
+          <span class="field__label">用户设定</span>
+          <textarea class="input field__area" v-model="draftForm.persona" rows="4"
+                    placeholder="写一段「我是谁」，会作为【用户设定】发给 AI"></textarea>
+          <p class="field__hint">应用这个面具后，AI 会把这段当成用户本人的设定。</p>
+        </label>
+
+        <div class="btn-row">
+          <button class="btn" type="button" :disabled="!draftForm.name.trim()" @click="saveDraft">保存</button>
         </div>
-        <div class="row">
-          <span class="row__main"><span class="row__label">聊天消息</span></span>
-          <span class="row__value">{{ stats.messages }} 条</span>
+        <p class="field__hint" v-if="!draftForm.name.trim()">先起个名字才能保存。</p>
+
+        <div class="btn-row" v-if="editId">
+          <button class="btn btn--primary" type="button" @click="applyMask(editId)">应用此面具</button>
+        </div>
+        <div class="btn-row" v-if="editId">
+          <button class="btn btn--danger" type="button" @click="removeMask">删除这个面具</button>
         </div>
       </div>
     `
@@ -1324,8 +1563,21 @@ window.SN = window.SN || {};
           });
       }
 
-      /* ---- 设置内部分页："" = 主列表；"api" | "weather" | "data" | "about" ---- */
+      /* ---- 设置内部分页："" = 主列表；"api" | "weather" | "data" | "stats" | "about" ---- */
       const subPage = ref("");
+
+      /* 统计（原来在「用户」页里，现在移到设置单独一排） */
+      const stats = computed(function () {
+        const chats = store.state.chats;
+        const messageCount = Object.keys(chats).reduce(function (sum, key) {
+          return sum + (chats[key] ? chats[key].length : 0);
+        }, 0);
+        return {
+          characters: store.state.characters.length,
+          entries: store.state.worldbook.length,
+          messages: messageCount
+        };
+      });
 
       function openSub(name) {
         subPage.value = name;
@@ -1354,12 +1606,13 @@ window.SN = window.SN || {};
         pickFile: pickFile,
         onFile: onFile,
         askReset: askReset,
+        stats: stats,
         subPage: subPage,
         openSub: openSub,
         changelog: SN.changelog,
         /* 头部导航上报：子页时标题显示对应名字，返回键回设置主列表 */
         navTitle: computed(function () {
-          const names = { api: "API", presets: "提示词预设", regex: "正则", memory: "记忆库", weather: "天气与位置", data: "数据管理", changelog: "更新日志" };
+          const names = { api: "API", presets: "提示词预设", regex: "正则", memory: "记忆库", weather: "天气与位置", data: "数据管理", stats: "统计", changelog: "更新日志" };
           return names[subPage.value] || "";
         }),
         navIsSub: computed(function () {
@@ -1410,6 +1663,12 @@ window.SN = window.SN || {};
           <button class="row" type="button" @click="openSub('data')">
             <span class="row__main">
               <span class="row__label">数据管理</span>
+            </span>
+            <sn-glyph class="row__chev" name="chevron-right" :size="18"></sn-glyph>
+          </button>
+          <button class="row" type="button" @click="openSub('stats')">
+            <span class="row__main">
+              <span class="row__label">统计</span>
             </span>
             <sn-glyph class="row__chev" name="chevron-right" :size="18"></sn-glyph>
           </button>
@@ -1568,6 +1827,31 @@ window.SN = window.SN || {};
       </div>
       <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="onFile" />
       <p class="field__hint" v-if="status">{{ status }}</p>
+      </div>
+
+      <!-- 子页：统计（原来在「用户」页里，现在单独一排入口） -->
+      <div v-else-if="subPage === 'stats'">
+        <div class="list">
+          <div class="row">
+            <span class="row__main">
+              <span class="row__label">角色</span>
+              <span class="row__sub">{{ stats.characters }} 个</span>
+            </span>
+          </div>
+          <div class="row">
+            <span class="row__main">
+              <span class="row__label">世界书条目</span>
+              <span class="row__sub">{{ stats.entries }} 条</span>
+            </span>
+          </div>
+          <div class="row">
+            <span class="row__main">
+              <span class="row__label">聊天消息</span>
+              <span class="row__sub">{{ stats.messages }} 条</span>
+            </span>
+          </div>
+        </div>
+完
       </div>
 
       <!-- 子页：更新日志 -->

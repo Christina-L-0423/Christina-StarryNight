@@ -14,15 +14,27 @@ window.SN = window.SN || {};
   const store = SN.store;
 
   /* ---------- 0) 预设占位符：{{char}} {{user}} {{persona}} ---------- */
+  /* 当前应用的面具：应用哪个面具，{{user}} 就替换成那个面具的名字 */
+  function activeMask() {
+    const state = store.state;
+    const list = Array.isArray(state.masks) ? state.masks : [];
+    let m = list.filter(function (x) {
+      return x && x.id === state.activeMaskId;
+    })[0];
+    if (!m) m = list[0] || null;
+    return m;
+  }
+
   function fillPlaceholders(text, char) {
     const state = store.state;
+    const mask = activeMask();
     return String(text == null ? "" : text)
       .split("{{char}}").join((char && char.name) || "")
-      .split("{{user}}").join((state.user && state.user.name) || "朋友")
+      .split("{{user}}").join((mask && mask.name) || (state.user && state.user.name) || "朋友")
       .split("{{persona}}").join((char && (char.persona || char.content)) || "");
   }
 
-  /* ---------- 1) 系统提示词的段落：预设 + 角色设定 + 命中的记忆库 ----------
+  /* ---------- 1) 系统提示词的段落：预设 + 角色设定 + 用户面具 + 命中的记忆库 ----------
      世界书由 apiClient 里的既有逻辑负责带出，这里不重复拼。 */
   function systemSections(char, characterId) {
     const state = store.state;
@@ -59,6 +71,14 @@ window.SN = window.SN || {};
     sections.push(
       (char && (char.persona || char.content)) || "一个温柔、真诚的聊天伙伴。"
     );
+
+    /* 【用户设定】：当前应用的面具。应用哪个面具，AI 看到的用户就是谁。 */
+    const mask = activeMask();
+    if (mask) {
+      sections.push("【用户设定】");
+      sections.push("用户的名字是「" + (mask.name || "朋友") + "」。");
+      if (mask.persona) sections.push(mask.persona);
+    }
 
     /* 【记忆库（命中的条目）】 */
     const memories = SN.logic.memory ? SN.logic.memory.match(id) : [];
@@ -152,10 +172,13 @@ window.SN = window.SN || {};
       snap.regexes = store.state.regexes || [];
       snap.memoryBank = store.state.memoryBank || [];
       snap.activePresetId = store.state.activePresetId || "";
+      snap.masks = store.state.masks || [];
+      snap.activeMaskId = store.state.activeMaskId || "";
       return snap;
     };
   }
 
   SN.logic.systemSections = systemSections;
   SN.logic.processReply = processReply;
+  SN.logic.activeMask = activeMask;
 })(window.SN);

@@ -128,6 +128,9 @@ window.SN = window.SN || {};
     memoryBank: Array.isArray(saved.memoryBank) ? saved.memoryBank : clone((SN.defaults && SN.defaults.memoryBank) || []),
     /* 当前使用的预设 id（逻辑层 prompt.js 优先用它挑预设） */
     activePresetId: saved.activePresetId || (SN.defaults && SN.defaults.activePresetId) || "",
+    /* 用户面具表 + 当前应用的面具 id（prompt.js 用它决定 AI 看到的用户名字/设定） */
+    masks: Array.isArray(saved.masks) && saved.masks.length ? saved.masks : clone((SN.defaults && SN.defaults.masks) || []),
+    activeMaskId: typeof saved.activeMaskId === "string" ? saved.activeMaskId : (SN.defaults && SN.defaults.activeMaskId) || "",
     /* 自定义壁纸列表（只存 id 和名字；图片本体在 mediaStore 的图片库里） */
     customWallpapers: Array.isArray(saved.customWallpapers) ? saved.customWallpapers : []
   });
@@ -205,6 +208,8 @@ window.SN = window.SN || {};
       worldbook: clone(state.worldbook),
       forumPosts: clone(state.forumPosts),
       chats: clone(state.chats),
+      masks: clone(state.masks),
+      activeMaskId: state.activeMaskId,
       /* 自定义壁纸只存 id + 名字，图片本体不放进 localStorage（太大了） */
       customWallpapers: state.customWallpapers.map(function (w) {
         return { id: w.id, name: w.name };
@@ -229,7 +234,7 @@ window.SN = window.SN || {};
   /* 任何一处数据变化，都会自动保存到本地 */
   watch(
     function () {
-      return [state.settings, state.user, state.characters, state.worldbook, state.forumPosts, state.chats, state.customWallpapers];
+      return [state.settings, state.user, state.characters, state.worldbook, state.forumPosts, state.chats, state.customWallpapers, state.masks, state.activeMaskId];
     },
     persistSoon,
     { deep: true }
@@ -346,6 +351,8 @@ window.SN = window.SN || {};
     if (Array.isArray(payload.regexes)) state.regexes = payload.regexes;
     if (Array.isArray(payload.memoryBank)) state.memoryBank = payload.memoryBank;
     if (typeof payload.activePresetId === "string") state.activePresetId = payload.activePresetId;
+    if (Array.isArray(payload.masks) && payload.masks.length) state.masks = payload.masks;
+    if (typeof payload.activeMaskId === "string") state.activeMaskId = payload.activeMaskId;
 
     /* 恢复自定义壁纸：列表 + 把图片写回本机图片库 */
     const imageMap = {};
@@ -413,6 +420,8 @@ window.SN = window.SN || {};
     state.regexes = clone((SN.defaults && SN.defaults.regexes) || []);
     state.memoryBank = clone((SN.defaults && SN.defaults.memoryBank) || []);
     state.activePresetId = (SN.defaults && SN.defaults.activePresetId) || "";
+    state.masks = clone((SN.defaults && SN.defaults.masks) || []);
+    state.activeMaskId = (SN.defaults && SN.defaults.activeMaskId) || "";
     state.customWallpapers = [];
     if (SN.mediaStore && SN.mediaStore.clear) SN.mediaStore.clear();
     state.activeApp = null;

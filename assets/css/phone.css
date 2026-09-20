@@ -172,28 +172,26 @@
   padding: 10px 22px 6px;
 }
 
-.home > .widget {
-  flex-shrink: 0;
-}
-
-/* 小组件栅位：每一页都留出同样的一格（只有小组件所在那页真的放小组件），
-   这样翻页时图标行列不会上下错位。106px ≈ 小组件自身高度。 */
-.home__widget-slot {
-  flex: none;
-  height: 106px;
-}
-
-.home__widget-slot--top {
-  margin-bottom: 24px;
-}
-
-.home__widget-slot--bottom {
-  margin-top: 24px;
+/* 小组件跟图标一样住在网格里：占 4×2（整行宽 + 跨 2 行），可以在任意页的任意行（见 home.js 模板）。
+   grid-row: span 2 一次占住两行，图标会自动排到剩下的四行里。 */
+.home__cell--widget {
+  grid-column: 1 / -1;
+  grid-row: span 2;
+  justify-self: stretch;
 }
 
 /* 小组件被抓起时，原位置留个淡影 */
-.home__widget-slot.is-holding {
+.home__cell.is-holding {
   opacity: 0.35;
+}
+
+/* 小组件拖动时的落点预览：虚线框画在预览带的两行上 */
+.home__cell.is-whover,
+.home__cell.is-drop {
+  outline: 1.5px dashed rgba(255, 255, 255, 0.65);
+  outline-offset: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
 }
 
 /* 隐藏滚动条，更像原生 App */
@@ -264,7 +262,8 @@
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  grid-template-rows: repeat(4, minmax(84px, 1fr));
+  /* 6 行：图标上下更紧凑；小组件占其中的 2 行 */
+  grid-template-rows: repeat(6, minmax(76px, 1fr));
   justify-items: center;
 }
 
@@ -452,6 +451,11 @@
   animation: app-jiggle 0.3s ease-in-out infinite;
 }
 
+/* 小组件在编辑模式里也一起抖动（iOS 同款手感） */
+.home__pager.is-editing .home__cell--widget .widget {
+  animation: app-jiggle 0.3s ease-in-out infinite;
+}
+
 .home__pager.is-editing .home__cell:nth-child(3n) .app-icon {
   animation-delay: 0.1s;
 }
@@ -462,9 +466,9 @@
 
 /* 滑动式翻页：一条轨道放所有页，transform 切换，边缘留白隐藏相邻页 */
 .home__pager {
-  /* 最小高度 = 小组件 106 + 间距 24 + 四行图标 336；屏幕更高时自动长高 */
-  flex: 1 0 466px;
-  min-height: 466px;
+  /* 最小高度 ≈ 6 行图标（6×76=456）；屏幕更高时自动长高 */
+  flex: 1 0 456px;
+  min-height: 456px;
   overflow: hidden;
   border-radius: 8px;
   touch-action: none;

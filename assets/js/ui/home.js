@@ -7,13 +7,17 @@
     setup: function () {
       const { ref, computed, watch, onBeforeUnmount, nextTick } = Vue;
       const store = SN.store;
-      const SLOTS = 16;
+      const COLS = 4;
+      const ROWS = 6; /* 每页 4×6 = 24 个槽位，行高更矮、图标上下更紧凑 */
+      const WSPAN = 2; /* 小组件占 2 行（整行宽） */
+      const SLOTS = COLS * ROWS;
+      const MAX_ROW = ROWS - WSPAN; /* 小组件最高能停的行号 */
       const MAX_PAGES = 5;
       let serial = 0;
       function makePage(slots) {
         return { key: ++serial, slots: slots || Array(SLOTS).fill(null) };
       }
-      /* null 是真实空位：不 filter 图标，不因移动而压缩行列。兼容旧数组备份。 */
+      /* null 是真实空位：不 filter 图标，不因移动而压缩行列。兼容旧数组备份（旧的是 4×4=16 格）。 */
       function normalize(saved) {
         const ids = SN.apps.map(function (app) { return app.id; });
         const seen = new Set();
@@ -37,18 +41,74 @@
         return pages;
       }
       const layout = ref(normalize(store.state.settings.homeLayout));
-      /* 小组件位置：住在哪一页 + 在图标网格上方还是下方（全局，保证各页行列对齐） */
+      /* 小组件位置：住在哪一页 + 从第几行开始（占 2 行，跟图标一样住在网格里，任意位置） */
       function readWidget(saved) {
         const s = saved && typeof saved === "object" ? saved : {};
-        return { page: Math.max(0, Number(s.page) || 0), bottom: Boolean(s.bottom) };
+        const page = Math.max(0, Number(s.page) || 0);
+        /* 旧数据只有 {page, bottom}：迁到第 0 行 / 网格末尾 */
+        let row = 0;
+        if (typeof s.row === "number" && isFinite(s.row)) row = Math.max(0, Math.min(MAX_ROW, Math.floor(s.row)));
+        else if (s.bottom) row = MAX_ROW;
+        return { page: page, row: row };
       }
       const widget = ref(readWidget(store.state.settings.homeWidget));
+      /* 备份里的小组件行可能不合法（旧版越界值 / 页数被删减），拉回有效范围 */
       function clampWidget() {
         const last = Math.max(0, layout.value.length - 1);
         if (widget.value.page > last) widget.value.page = last;
         if (widget.value.page < 0) widget.value.page = 0;
+        if (widget.value.row > MAX_ROW) widget.value.row = MAX_ROW;
+        if (widget.value.row < 0) widget.value.row = 0;
       }
       clampWidget(); /* 备份里的小组件页号可能超过现在的页数，先夹到有效范围 */
+      /* 小组件占住的槽位号列表：从 row 开始跨 WSPAN 行、占整行宽 */
+      function widgetSlots(w) {
+        const cells = [];
+        for (let r = w.row; r < w.row + WSPAN; r += 1) {
+          for (let c = 0; c < COLS; c += 1) cells.push(r * COLS + c);
+        }
+        return cells;
+      }
+      /* 这个槽位是否被该页上的小组件占着 */
+      function isWidgetSlot(slotIndex, pageIndex) {
+        return widget.value.page === pageIndex && widgetSlots(widget.value).indexOf(slotIndex) !== -1;
+      }
+      /* 把被小组件压住的图标搬到最近空位（先扫自己这一页 → 再顺着往后 → 最后回头 → 满了就新开一页） */
+      function relocateIcon(id, pageIndex, avoid) {
+        const total = layout.value.length;
+        for (let n = 0; n < total; n += 1) {
+          const pi = (pageIndex + n) % total;
+          const slots = layout.value[pi].slots;
+          for (let i = 0; i < SLOTS; i += 1) {
+            if (isWidgetSlot(i, pi)) continue;
+            if (slots[i]) continue;
+            if (avoid && avoid(pi, i)) continue;
+            slots[i] = id;
+            return true;
+          }
+        }
+        const np = makePage();
+        np.slots[0] = id;
+        layout.value.push(np);
+        return true;
+      }
+      function relocateCovered() {
+        layout.value.forEach(function (pg, pi) {
+          pg.slots.forEach(function (id, i) {
+            if (!id || !isWidgetSlot(i, pi)) return;
+            /* 先把被压住的那格腾空：否则搬走后原位还留着同一个 id，布局里会出现重复图标 */
+            pg.slots[i] = null;
+            relocateIcon(id, pi, function (fp, fi) { return fp === pi && fi === i; });
+          });
+        });
+      }
+      relocateCovered(); /* 旧数据迁移：如果小组件恰好压在图标上，把图标挪开 */
+      function persistLayout() {
+        store.state.settings.homeLayout = layout.value.map(function (p) { return p.slots.slice(); });
+      }
+      function persistWidget() {
+        store.state.settings.homeWidget = { page: widget.value.page, row: widget.value.row };
+      }
       const page = ref(0);
       const editing = ref(false);
       const dragging = ref(null);
@@ -70,8 +130,8 @@
       let rebaseToken = 0;
       function persist() {
         writing = true;
-        store.state.settings.homeLayout = layout.value.map(function (p) { return p.slots.slice(); });
-        store.state.settings.homeWidget = { page: widget.value.page, bottom: widget.value.bottom };
+        persistLayout();
+        persistWidget();
         writing = false;
         if (store.persistNow) store.persistNow();
       }
@@ -124,6 +184,7 @@
         layout.value = kept;
         page.value = Math.max(0, kept.indexOf(current));
         widget.value.page = Math.max(0, kept.indexOf(wPage));
+        relocateCovered(); /* 小组件换页/换行后可能压到图标，统一把被压的挪开 */
         persist();
         releaseRebase();
       }
@@ -177,12 +238,12 @@
           dragging.value = start;
           suppressUntil = Date.now() + 500;
         }
-        /* 小组件：只有它所在的那一页能抓起 */
-        const band = e.target.closest && e.target.closest("[data-widget-band]");
+        /* 小组件：跟图标一样住在网格里，只有它所在的那一页能抓起 */
+        const band = e.target.closest && e.target.closest("[data-widget-slot]");
         if (band) {
-          const bpi = Number(band.dataset.widgetBand);
+          const bpi = Number(band.dataset.page);
           if (bpi !== page.value || widget.value.page !== bpi) return;
-          const start = { kind: "widget", id: "", page: bpi, index: -1, x: e.clientX, y: e.clientY };
+          const start = { kind: "widget", id: "", page: bpi, row: widget.value.row, index: -1, x: e.clientX, y: e.clientY };
           if (editing.value) hold(start);
           else lpTimer = window.setTimeout(function () { hold(start); }, 420);
           return;
@@ -208,8 +269,8 @@
         if (x < viewport.left || x > viewport.right || y < viewport.top || y > viewport.bottom) return null;
         const col = Math.max(0, Math.min(3, Math.floor((x - viewport.left) / (viewport.width / 4))));
         const cy = Math.max(r.top + 1, Math.min(r.bottom - 1, y));
-        const row = Math.max(0, Math.min(3, Math.floor((cy - r.top) / (r.height / 4))));
-        return { page: page.value, index: row * 4 + col };
+        const row = Math.max(0, Math.min(ROWS - 1, Math.floor((cy - r.top) / (r.height / ROWS))));
+        return { page: page.value, index: row * COLS + col, row: row };
       }
       function flipEdge(side) {
         if (!dragging.value || rebasing.value) return;
@@ -256,8 +317,7 @@
           if (e.cancelable) e.preventDefault();
           dragging.value.x = e.clientX;
           dragging.value.y = e.clientY;
-          /* 小组件是整行宽的，不落到具体格子上，只按所在页 + 上下位置落位 */
-          hover.value = dragging.value.kind === "widget" ? null : slotAt(e.clientX, e.clientY);
+          hover.value = slotAt(e.clientX, e.clientY);
           updateEdge(e.clientX, e.clientY);
           return;
         }
@@ -279,15 +339,26 @@
         clearEdge();
         const d = dragging.value;
         if (d && d.kind === "widget") {
-          /* 落在哪一页就住哪一页；落在屏幕上半 → 网格上方，下半 → 网格下方 */
-          const r = pagerEl.value ? pagerEl.value.getBoundingClientRect() : null;
-          widget.value.page = page.value;
-          if (r) widget.value.bottom = e.clientY > r.top + r.height / 2;
+          /* 跟图标同款落点：落在哪一页就住哪一页；行号按手指位置吸附，压到图标就把它们搬开 */
+          const target = slotAt(e.clientX, e.clientY);
+          if (target) {
+            const w = widget.value;
+            /* 放回自己占的那两行 = 原地不动；其余按手指位置吸附（最后一行上移一格） */
+            const row =
+              target.page === w.page && (target.row === w.row || target.row === w.row + 1)
+                ? w.row
+                : Math.max(0, Math.min(MAX_ROW, target.row > MAX_ROW - 1 ? target.row - 1 : target.row));
+            const moved = row !== widget.value.row || target.page !== widget.value.page;
+            widget.value.page = target.page;
+            widget.value.row = row;
+            if (moved) relocateCovered();
+          }
           hover.value = null;
           persist();
         } else if (d) {
           const target = slotAt(e.clientX, e.clientY);
-          if (target) {
+          /* 小组件占的那几格不放图标（松手在上面就当放回原处） */
+          if (target && !isWidgetSlot(target.index, target.page)) {
             const source = layout.value[d.page].slots;
             const dest = layout.value[target.page].slots;
             source[d.index] = dest[target.index];
@@ -341,10 +412,44 @@
         window.removeEventListener("pointercancel", onCancel);
         window.removeEventListener("blur", onBlur);
       });
+      /* ---- 模板用的落点高亮辅助：图标格 / 小组件两条预览带 ---- */
+      const wrow = computed(function () {
+        const h = hover.value;
+        if (!h || !dragging.value || dragging.value.kind !== "widget") return -1;
+        /* 手指落回小组件自己占的那两行 = 原地不动（预览和落点共用这条规则） */
+        const w = widget.value;
+        if (h.page === w.page && (h.row === w.row || h.row === w.row + 1)) return w.row;
+        return Math.max(0, Math.min(MAX_ROW, h.row > MAX_ROW - 1 ? h.row - 1 : h.row));
+      });
+      function isHoverCell(i, pi) {
+        const h = hover.value;
+        return !!(h && h.page === pi && h.index === i && !(dragging.value && dragging.value.kind === "widget"));
+      }
+      function isWidgetHover(r, pi) {
+        const h = hover.value;
+        if (!h || h.page !== pi) return false;
+        if (!dragging.value || dragging.value.kind !== "widget") return false;
+        return r === wrow.value || r === wrow.value + 1;
+      }
+      function isSourceCell(i, pi) {
+        const d = dragging.value;
+        return !!(d && d.kind === "app" && d.page === pi && d.index === i);
+      }
+      function isWidgetSource(pi) {
+        const d = dragging.value;
+        return !!(d && d.kind === "widget" && d.page === pi);
+      }
+      function isWidgetDrop(r, pi) {
+        if (!dragging.value || dragging.value.kind !== "widget" || hover.value) return false;
+        return dragging.value.page === pi && (r === dragging.value.row || r === dragging.value.row + 1);
+      }
       return {
         SLOTS: SLOTS, layout: layout, page: page, editing: editing,
         dragging: dragging, hover: hover, pagerEl: pagerEl, trackStyle: trackStyle,
-        widget: widget, moving: moving, ghostStyle: ghostStyle,
+        widget: widget, moving: moving, ghostStyle: ghostStyle, wrow: wrow,
+        isHoverCell: isHoverCell, isWidgetHover: isWidgetHover,
+        isSourceCell: isSourceCell, isWidgetSource: isWidgetSource,
+        isWidgetDrop: isWidgetDrop,
         showLabel: computed(function () { return store.state.settings.homeLabels; }),
         appById: appById, openApp: openApp, goPage: goPage,
         finishEdit: finishEdit, pagerDown: pagerDown
@@ -355,28 +460,25 @@
         <div class="home__pager" ref="pagerEl" :class="{ 'is-editing': editing, 'is-moving': moving }">
           <div class="home__track" :style="trackStyle">
             <div class="home__page" v-for="(p, pi) in layout" :key="p.key" :inert="pi !== page">
-              <!-- 小组件的位置：它所在的那一页显示小组件，其他页留出同样高度的空位，
-                   这样翻页时各行图标不会上下错位。位置（上/下）是全局的。 -->
-              <div class="home__widget-slot home__widget-slot--top" v-if="!widget.bottom"
-                   :data-widget-band="widget.page === pi ? pi : null"
-                   :class="{ 'is-holding': dragging && dragging.kind === 'widget' && widget.page === pi }">
-                <sn-widget v-if="widget.page === pi"></sn-widget>
-              </div>
+              <!-- 小组件跟图标一样住在网格里：占 4×2（整行宽、跨 2 行），可以在任意页的任意行。
+                   用 grid-row: span 2 一次占住两行，不再需要额外的占位格子，翻页时行列自然对齐。 -->
               <div class="home__grid">
-                <div class="home__cell" v-for="i in SLOTS" :key="i" data-slot
-                     :data-page="pi" :data-index="i - 1"
-                     :class="{
-                       'is-hover': hover && hover.page === pi && hover.index === i - 1,
-                       'is-source': dragging && dragging.kind === 'app' && dragging.page === pi && dragging.index === i - 1
-                     }">
-                  <sn-app-icon v-if="p.slots[i - 1]" :app="appById(p.slots[i - 1])"
-                               :show-label="showLabel" @open="openApp"></sn-app-icon>
-                </div>
-              </div>
-              <div class="home__widget-slot home__widget-slot--bottom" v-if="widget.bottom"
-                   :data-widget-band="widget.page === pi ? pi : null"
-                   :class="{ 'is-holding': dragging && dragging.kind === 'widget' && widget.page === pi }">
-                <sn-widget v-if="widget.page === pi"></sn-widget>
+                <template v-for="r in 6" :key="'r' + r">
+                  <div v-if="widget.page === pi && r - 1 === widget.row" class="home__cell home__cell--widget"
+                       data-widget-slot :data-page="pi" :data-row="widget.row"
+                       :class="{ 'is-holding': isWidgetSource(pi), 'is-drop': isWidgetDrop(r - 1, pi), 'is-whover': isWidgetHover(r - 1, pi) }">
+                    <sn-widget></sn-widget>
+                  </div>
+                  <template v-else-if="widget.page === pi && r - 1 === widget.row + 1"></template>
+                  <template v-else>
+                    <div v-for="c in 4" :key="'c' + c" class="home__cell" data-slot
+                         :data-page="pi" :data-index="(r - 1) * 4 + (c - 1)"
+                         :class="{ 'is-hover': isHoverCell((r - 1) * 4 + (c - 1), pi), 'is-source': isSourceCell((r - 1) * 4 + (c - 1), pi) }">
+                      <sn-app-icon v-if="p.slots[(r - 1) * 4 + (c - 1)]" :app="appById(p.slots[(r - 1) * 4 + (c - 1)])"
+                                   :show-label="showLabel" @open="openApp"></sn-app-icon>
+                    </div>
+                  </template>
+                </template>
               </div>
             </div>
           </div>

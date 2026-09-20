@@ -213,4 +213,21 @@ window.SN = window.SN || {};
     signature: "在星夜里慢慢写字的人",
     gradient: "linear-gradient(150deg, #7e8cff, #d174ff)"
   };
+
+  /* ------------------------------------------------------------
+     8) 用户面具：一套「我是谁」。应用某个面具后，AI 看到的用户名字
+        与【用户设定】段落都会换成它。可以建多套随时切换。
+     ------------------------------------------------------------ */
+  SN.defaults.masks = [
+    {
+      id: "mask_default",
+      name: "夜行旅客",
+      persona: "喜欢在深夜看星星、慢慢写点东西的人，说话不多但很真诚。",
+      gradient: "linear-gradient(150deg, #7e8cff, #d174ff)",
+      locked: false
+    }
+  ];
+
+  /* 当前应用的面具 id（空 = 用列表里的第一个面具） */
+  SN.defaults.activeMaskId = "mask_default";
 })(window.SN);
