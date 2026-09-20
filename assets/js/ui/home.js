@@ -219,13 +219,17 @@
       const moving = computed(function () {
         return following.value || rebasing.value || animating.value;
       });
-      /* 拖动时跟着手指的「幽灵」：图标小、小组件是整行宽，偏移量不一样 */
+      /* 拖动时跟着手指的「幽灵」：图标小、小组件是整张 4×2 卡，偏移量不一样。
+         小组件抓起时按真实格子量好宽高（hold() 里记到 dragging 上），幽灵和真身一样大、中心跟着手指。 */
       const ghostStyle = computed(function () {
         const d = dragging.value;
         if (!d) return {};
-        return d.kind === "widget"
-          ? { left: d.x - 150 + "px", top: d.y - 52 + "px" }
-          : { left: d.x - 30 + "px", top: d.y - 30 + "px" };
+        if (d.kind === "widget") {
+          const w = d.gw || 300;
+          const h = d.gh || 104;
+          return { left: d.x - w / 2 + "px", top: d.y - h / 2 + "px", width: w + "px", height: h + "px" };
+        }
+        return { left: d.x - 30 + "px", top: d.y - 30 + "px" };
       });
       /* 图标、小组件和空白区域都可以开始横向手势。 */
       function pagerDown(e) {
@@ -235,6 +239,14 @@
         function hold(start) {
           if (!pointer || store.state.activeApp) return;
           editing.value = true;
+          /* 小组件的幽灵要和真身一样大：抓起时量一下它所在的 4×2 格子（用布局尺寸，不受抖动动画影响） */
+          if (start.kind === "widget") {
+            const cell = document.querySelector(".home__cell--widget");
+            if (cell) {
+              start.gw = cell.offsetWidth;
+              start.gh = cell.offsetHeight;
+            }
+          }
           dragging.value = start;
           suppressUntil = Date.now() + 500;
         }
@@ -347,7 +359,7 @@
             const row =
               target.page === w.page && (target.row === w.row || target.row === w.row + 1)
                 ? w.row
-                : Math.max(0, Math.min(MAX_ROW, target.row > MAX_ROW - 1 ? target.row - 1 : target.row));
+                : Math.max(0, Math.min(MAX_ROW, target.row > MAX_ROW ? target.row - 1 : target.row));
             const moved = row !== widget.value.row || target.page !== widget.value.page;
             widget.value.page = target.page;
             widget.value.row = row;
@@ -419,7 +431,7 @@
         /* 手指落回小组件自己占的那两行 = 原地不动（预览和落点共用这条规则） */
         const w = widget.value;
         if (h.page === w.page && (h.row === w.row || h.row === w.row + 1)) return w.row;
-        return Math.max(0, Math.min(MAX_ROW, h.row > MAX_ROW - 1 ? h.row - 1 : h.row));
+        return Math.max(0, Math.min(MAX_ROW, h.row > MAX_ROW ? h.row - 1 : h.row));
       });
       function isHoverCell(i, pi) {
         const h = hover.value;

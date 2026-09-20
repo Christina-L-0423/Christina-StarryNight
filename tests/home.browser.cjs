@@ -150,9 +150,11 @@ async function boot() {
   ok('SN.store exposed', await evaluate('!!window.SN && !!SN.store'));
   const expected = await evaluate('SN.apps.map(function(a){return a.name;})');
   same('every app rendered somewhere in the grid', (await slots()).filter(Boolean), expected);
-  const size = await evaluate(`(() => { const g=document.querySelector('.home__grid').getBoundingClientRect(); const rh=g.height/6; const pages=[...document.querySelectorAll('.home__page')]; const w=document.querySelector('.home__cell--widget'); const wt=w.querySelector('.widget'); const icons=[...pages[0].querySelectorAll('[data-slot]')]; const h=icons.map(el=>el.getBoundingClientRect().height); const bands=[...new Set(icons.map(function(el){return Math.round((el.getBoundingClientRect().top-g.top)/rh);}))]; const wbands=[...new Set([].concat.apply([],[...pages[0].querySelectorAll('.home__cell--widget,.home__cell--widget-ghost')].map(function(el){return [Math.round((el.getBoundingClientRect().top-g.top)/rh),Math.round((el.getBoundingClientRect().bottom-g.top)/rh)];})))]; return {grid:Math.round(g.height),row:Math.round(rh),min:Math.round(Math.min.apply(null,h)),iconCells:icons.length,rowBands:bands.length,widgetBands:wbands.length,widgetTop:Math.round(wt.getBoundingClientRect().top-g.top),slotsPerBand:icons.length/4}; })()`);
+  const size = await evaluate(`(() => { const g=document.querySelector('.home__grid').getBoundingClientRect(); const rh=g.height/6; const pages=[...document.querySelectorAll('.home__page')]; const w=document.querySelector('.home__cell--widget'); const wt=w.querySelector('.widget'); const icons=[...pages[0].querySelectorAll('[data-slot]')]; const h=icons.map(el=>el.getBoundingClientRect().height); const bands=[...new Set(icons.map(function(el){return Math.round((el.getBoundingClientRect().top-g.top)/rh);}))]; const wbands=[...new Set([].concat.apply([],[...pages[0].querySelectorAll('.home__cell--widget,.home__cell--widget-ghost')].map(function(el){return [Math.round((el.getBoundingClientRect().top-g.top)/rh),Math.round((el.getBoundingClientRect().bottom-g.top)/rh)];})))]; return {grid:Math.round(g.height),row:Math.round(rh),min:Math.round(Math.min.apply(null,h)),iconCells:icons.length,rowBands:bands.length,widgetBands:wbands.length,widgetTop:Math.round(wt.getBoundingClientRect().top-g.top),gw:Math.round(g.width),ww:Math.round(wt.getBoundingClientRect().width),wh:Math.round(wt.getBoundingClientRect().height),slotsPerBand:icons.length/4}; })()`);
   equal('grid is 4 columns x 6 rows (24 slots)', size.slotsPerBand, 4);
   equal('widget covers 4x2 = two whole rows', size.widgetBands, 2);
+  equal('widget glass spans the full grid width (4 columns wide)', size.ww, size.gw);
+  ok('widget glass fills both rows (a real 4x2 card, not content-sized)', Math.abs(size.wh - size.row * 2) <= 2, size);
   equal('the other four rows hold 4x4 = 16 icon cells', size.iconCells, 16);
   ok('all six rows are usable and compact', size.grid >= 456 && size.min >= 60 && size.row >= 76, size);
   equal('icons span the four free row bands', size.rowBands, 4);
@@ -383,10 +385,21 @@ async function boot() {
   await wait(450);
   say('widget lives anywhere in the grid (not just top/bottom) + backup round trip');
 
-  /* 拖到下半屏 → 吸附到网格最下面两行。
-   注意落点要在长按生效「之后」再取：进入编辑态时桌面会缩放，提前量的坐标会落出缩放后的视口。 */
-  const band2 = await widgetCenter();
-  await mouse('mousePressed', band2.x, band2.y);
+  /* 手指放在第 5 行（倒数第二行）也要能落到最下面两行：修复前第 4 行会被顶回第 3 行，
+     用户怎么拖都放不到最下面。落点要等长按生效后再取（进入编辑态时桌面会缩放）。 */
+  const bandMid = await widgetCenter();
+  await mouse('mousePressed', bandMid.x, bandMid.y);
+  await wait(470);
+  const gr2 = await gridRect();
+  const rowFive = { x: gr2.x + gr2.width / 2, y: gr2.top + (gr2.height / 6) * 4.5 };
+  await mouse('mouseMoved', rowFive.x, rowFive.y);
+  await mouse('mouseReleased', rowFive.x, rowFive.y);
+  await wait(250);
+  equal('dropping on the 5th row lands the widget on the bottom two rows', (await widgetAt()).row, 4);
+
+  /* 再从底部拖到屏幕最下缘（手指在第 6 行）→ 仍然吸附在最下面两行 */
+  const bandLow = await widgetCenter();
+  await mouse('mousePressed', bandLow.x, bandLow.y);
   await wait(470);
   const lower = await evaluate(`(() => { const r=document.querySelector('.home__pager').getBoundingClientRect(); return {x:r.x+r.width/2, y:r.bottom-20}; })()`);
   await mouse('mouseMoved', lower.x, lower.y);
