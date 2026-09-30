@@ -72,7 +72,10 @@ window.SN = window.SN || {};
     return "请求失败，请稍后再试。";
   }
 
-  /* ---------- 组装发给 AI 的消息（系统设定 + 世界书 + 最近聊天） ---------- */
+  /* ---------- 组装发给 AI 的消息（系统设定 + 世界书 + 最近 N 轮对话） ----------
+     顺序固定：系统提示词（预设 / 角色设定 / 用户设定 / 命中的记忆库 / 世界书）
+     → 最近 N 轮对话 → 本次用户消息（它就在聊天记录的最后一条）。
+     N 由「聊天页右上角 ··· → 聊天设置」按角色决定（logic/prompt.js 的 SN.logic.context）。 */
   function buildMessages(characterId) {
     const state = SN.store.state;
     const char = state.characters.filter(function (c) {
@@ -80,7 +83,6 @@ window.SN = window.SN || {};
     })[0];
     if (!char) throw new Error("找不到这个角色，请重新从会话列表进入。");
 
-    const api = apiSettings();
     const lines = [];
 
     lines.push("你在一个「AI 陪伴小手机」应用里扮演角色「" + char.name + "」，和用户持续聊天。");
@@ -109,7 +111,10 @@ window.SN = window.SN || {};
         "保持角色不出戏；不要声称自己是 AI 或模型；回复像微信聊天一样自然简短；不要每条都以反问结尾。"
     );
 
-    const keep = Math.max(2, Number(api.contextCount) || 20);
+    /* 上下文记忆：默认带上这个角色最近 100 轮对话（1 轮 = user 1 条 + assistant 1 条），
+       在「聊天设置」里能按角色调（1 ~ 500 轮）。带不上的部分（聊天记录没那么长）自动少带。 */
+    const rounds = SN.logic && SN.logic.context ? SN.logic.context.rounds(characterId) : 100;
+    const keep = Math.max(2, rounds * 2);
     const history = (state.chats[characterId] || [])
       .slice(-keep)
       .map(function (m) {

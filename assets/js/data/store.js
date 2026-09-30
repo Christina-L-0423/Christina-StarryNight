@@ -132,7 +132,12 @@ window.SN = window.SN || {};
     masks: Array.isArray(saved.masks) && saved.masks.length ? saved.masks : clone((SN.defaults && SN.defaults.masks) || []),
     activeMaskId: typeof saved.activeMaskId === "string" ? saved.activeMaskId : (SN.defaults && SN.defaults.activeMaskId) || "",
     /* 自定义壁纸列表（只存 id 和名字；图片本体在 mediaStore 的图片库里） */
-    customWallpapers: Array.isArray(saved.customWallpapers) ? saved.customWallpapers : []
+    customWallpapers: Array.isArray(saved.customWallpapers) ? saved.customWallpapers : [],
+    /* 每个角色单独的聊天设置：{ 角色id: { contextRounds: 100 } }
+       contextRounds = 上下文记忆轮数（1 轮 = 用户 1 条 + AI 1 条），
+       在「聊天页右上角 ··· → 聊天设置」里改；没改过的角色不占位置，
+       读的时候用 config.js 的 SN.contextRounds.default 兜底（logic/prompt.js） */
+    chatSettings: saved.chatSettings && typeof saved.chatSettings === "object" ? saved.chatSettings : {}
   });
 
   /* ---------- 时间：每秒刷新 ---------- */
@@ -255,6 +260,8 @@ window.SN = window.SN || {};
       chats: clone(state.chats),
       masks: clone(state.masks),
       activeMaskId: state.activeMaskId,
+      /* 每个角色单独的聊天设置（上下文记忆轮数），随备份导出/导入 */
+      chatSettings: clone(state.chatSettings),
       /* 自定义壁纸只存 id + 名字，图片本体不放进 localStorage（太大了） */
       customWallpapers: state.customWallpapers.map(function (w) {
         return { id: w.id, name: w.name };
@@ -279,7 +286,7 @@ window.SN = window.SN || {};
   /* 任何一处数据变化，都会自动保存到本地 */
   watch(
     function () {
-      return [state.settings, state.user, state.characters, state.worldbook, state.forumPosts, state.chats, state.customWallpapers, state.masks, state.activeMaskId];
+      return [state.settings, state.user, state.characters, state.worldbook, state.forumPosts, state.chats, state.customWallpapers, state.masks, state.activeMaskId, state.chatSettings];
     },
     persistSoon,
     { deep: true }
@@ -398,6 +405,10 @@ window.SN = window.SN || {};
     if (typeof payload.activePresetId === "string") state.activePresetId = payload.activePresetId;
     if (Array.isArray(payload.masks) && payload.masks.length) state.masks = payload.masks;
     if (typeof payload.activeMaskId === "string") state.activeMaskId = payload.activeMaskId;
+    /* 每个角色的聊天设置（上下文记忆轮数） */
+    if (payload.chatSettings && typeof payload.chatSettings === "object") {
+      state.chatSettings = payload.chatSettings;
+    }
 
     /* 恢复自定义壁纸：列表 + 把图片写回本机图片库 */
     const imageMap = {};
@@ -467,6 +478,8 @@ window.SN = window.SN || {};
     state.activePresetId = (SN.defaults && SN.defaults.activePresetId) || "";
     state.masks = clone((SN.defaults && SN.defaults.masks) || []);
     state.activeMaskId = (SN.defaults && SN.defaults.activeMaskId) || "";
+    /* 每个角色的聊天设置（上下文记忆轮数）也跟着回到出厂 */
+    state.chatSettings = {};
     state.customWallpapers = [];
     if (SN.mediaStore && SN.mediaStore.clear) SN.mediaStore.clear();
     state.activeApp = null;

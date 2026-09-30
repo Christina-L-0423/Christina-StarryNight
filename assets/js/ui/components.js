@@ -224,7 +224,9 @@ window.SN = window.SN || {};
     },
     emits: ["close"],
     /* viewRef 指向当前页面组件；页面通过 navTitle / navIsSub / navBack / navBackLabel
-       上报自己的导航状态，头部据此显示正确的标题和返回行为。 */
+       上报自己的导航状态，头部据此显示正确的标题和返回行为。
+       页面还可以通过 navActions（[{ key, glyph, label }]）+ navAction(key)
+       在页头右侧放自己的操作键（目前只有聊天页的「···」→ 聊天设置）。 */
     setup: function () {
       return { viewRef: Vue.ref(null) };
     },
@@ -243,6 +245,11 @@ window.SN = window.SN || {};
         const v = this.viewRef;
         return (v && v.navTitle) || this.meta.name;
       },
+      /* 页头右侧的操作键：页面用 navActions 上报（返回数组，空数组 = 不显示） */
+      navActions: function () {
+        const v = this.viewRef;
+        return v && Array.isArray(v.navActions) ? v.navActions : [];
+      },
       /* 返回键上不再显示「桌面 / 返回」这种文字（只剩箭头 + 大标题），
          这个标签只留给读屏软件，界面上看不见。 */
       backAriaLabel: function () {
@@ -259,17 +266,28 @@ window.SN = window.SN || {};
         } else {
           this.$emit("close"); /* 主页：返回桌面 */
         }
+      },
+      /* 页头右侧操作键被点：交给当前页面自己处理 */
+      onAction: function (key) {
+        const v = this.viewRef;
+        if (v && typeof v.navAction === "function") v.navAction(key);
       }
     },
     template:
       '<section class="app-screen">' +
       '<header class="app-header">' +
-      /* 左上角是连在一起的一整块：[箭头 + 大标题]，整块可点返回。
+      /* 左上角是连在一起的一整块：[箭头 + 大标题]，整块可点返回；右边留给页面自己的操作键。
          没有第二个文字标签，也没有磨砂底 —— 箭头就是唯一的“退出”标记。 */
+      '<div class="app-header__bar">' +
       '<button class="back-btn" type="button" :aria-label="backAriaLabel" @click="onBack">' +
       '<sn-glyph class="back-btn__arrow" name="chevron-left" :size="20"></sn-glyph>' +
       '<span class="app-header__title">{{ title }}</span>' +
       "</button>" +
+      '<button v-for="a in navActions" :key="a.key" class="header-btn" type="button" ' +
+      ':aria-label="a.label" :title="a.label" @click="onAction(a.key)">' +
+      '<sn-glyph :name="a.glyph" :size="20"></sn-glyph>' +
+      "</button>" +
+      "</div>" +
       "</header>" +
       '<div class="app-body">' +
       '<component :is="viewName" :app="meta" ref="viewRef"></component>' +

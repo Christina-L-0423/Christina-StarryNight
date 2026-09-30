@@ -1,7 +1,8 @@
 /* ============================================================
    logic/prompt.js —— 逻辑层：提示词拼装 + 回复后处理
    管什么：怎么把数据层的表拼成一次 AI 请求、怎么处理回复
-   顺序：预设 → 角色设定 → 命中的世界书 → 命中的记忆库 → 最近 N 条上下文
+   顺序：预设 → 角色设定 → 命中的世界书 → 命中的记忆库
+        → 最近 N 轮上下文（每个角色可在「聊天设置」里单独调）
         → 调 API（logic/apiClient.js）→ 跑正则 → 按 ||| 分气泡 → 渲染
    ============================================================ */
 
@@ -143,7 +144,42 @@ window.SN = window.SN || {};
     return bubbles;
   }
 
-  /* ---------- 3) AI 消息落库前自动处理 ----------
+  /* ---------- 3) 上下文记忆：每个角色单独设「带多少轮」 ----------
+     1 轮 = 用户 1 条 + AI 1 条（两条消息）；默认值与允许范围见 config.js 的
+     SN.contextRounds（默认 100 轮、上限 500 轮、最少 1 轮）。
+     存法：state.chatSettings[角色id].contextRounds；没设置过的角色走默认值。
+     谁在用：聊天设置页（ui/views.js，读写）与拼请求的 apiClient.buildMessages（读）。 */
+  const ROUNDS = Object.assign({ default: 100, min: 1, max: 500, step: 1 }, SN.contextRounds || {});
+
+  /* 夹到合法范围；空值 / 非数字（没输数字）都当作默认值 */
+  function clampRounds(value) {
+    if (value === null || value === undefined) return ROUNDS.default;
+    if (typeof value === "string" && !value.trim()) return ROUNDS.default;
+    const n = Math.round(Number(value));
+    if (!isFinite(n)) return ROUNDS.default;
+    return Math.max(ROUNDS.min, Math.min(ROUNDS.max, n));
+  }
+
+  /* 这个角色到底带多少轮：改过就用改过的，没改过用默认值 */
+  function roundsFor(characterId) {
+    const map = store.state.chatSettings || {};
+    const entry = map[characterId];
+    return clampRounds(entry ? entry.contextRounds : null);
+  }
+
+  /* 写入（自动夹在 min ~ max 之间）；写进 state 后由数据层自动持久化 */
+  function setRounds(characterId, value) {
+    if (!characterId) return;
+    const state = store.state;
+    if (!state.chatSettings || typeof state.chatSettings !== "object") state.chatSettings = {};
+    state.chatSettings[characterId] = Object.assign(
+      {},
+      state.chatSettings[characterId] || {},
+      { contextRounds: clampRounds(value) }
+    );
+  }
+
+  /* ---------- 4) AI 消息落库前自动处理 ----------
      包一层 pushMessage：凡是 AI 的回复（role "them"/"ai"），先跑正则、
      再按 ||| 拆成多条气泡；用户消息与空消息原样放行。
      （保持原函数的三参数签名 characterId / role / text 不变） */
@@ -162,7 +198,7 @@ window.SN = window.SN || {};
     return last;
   };
 
-  /* ---------- 4) 备份/持久化带上逻辑层三张表 ----------
+  /* ---------- 5) 备份/持久化带上逻辑层三张表 ----------
      包一层 snapshot：导出备份与 localStorage 保存都经过它。 */
   const originalSnapshot = store.snapshot;
   if (originalSnapshot) {
@@ -181,4 +217,14 @@ window.SN = window.SN || {};
   SN.logic.systemSections = systemSections;
   SN.logic.processReply = processReply;
   SN.logic.activeMask = activeMask;
+  /* 上下文记忆轮数：聊天设置页读写它，buildMessages 读它 */
+  SN.logic.context = {
+    rounds: roundsFor,
+    setRounds: setRounds,
+    clamp: clampRounds,
+    MIN: ROUNDS.min,
+    MAX: ROUNDS.max,
+    DEFAULT: ROUNDS.default,
+    STEP: ROUNDS.step
+  };
 })(window.SN);

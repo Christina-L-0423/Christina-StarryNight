@@ -142,11 +142,97 @@ window.SN = window.SN || {};
 
       function openChat(id) {
         activeId.value = id;
+        settingsOpen.value = false;
         scrollToBottom();
       }
 
       function backToList() {
         activeId.value = null;
+        settingsOpen.value = false;
+      }
+
+      /* ---------- 聊天设置页（只针对当前这个角色） ----------
+         角色聊天页右上角「···」进来，只调这个角色的上下文记忆轮数：
+         1 轮 = 你 1 条 + AI 1 条，默认 100 轮、上限 500 轮（config.js 的 SN.contextRounds）。
+         读写都走逻辑层（logic/prompt.js 的 SN.logic.context），这里只负责界面。 */
+      const settingsOpen = ref(false);
+      const editingRounds = ref(false); /* 右边那个数字是不是正被手输 */
+      const roundsDraft = ref("");
+      /* 拿不到逻辑层（脚本没加载全）也不白屏：退回 config.js 里那份默认值 */
+      const roundsCfg = SN.contextRounds || { default: 100, min: 1, max: 500 };
+      const ctx =
+        (SN.logic && SN.logic.context) || {
+          rounds: function () {
+            return roundsCfg.default;
+          },
+          setRounds: function () {},
+          MIN: roundsCfg.min,
+          MAX: roundsCfg.max,
+          DEFAULT: roundsCfg.default
+        };
+
+      /* 拉条和数字共用这一个值：改它 = 改这个角色的设置（写进 state 后自动持久化） */
+      const rounds = computed({
+        get: function () {
+          return ctx.rounds(activeId.value);
+        },
+        set: function (value) {
+          ctx.setRounds(activeId.value, value);
+        }
+      });
+
+      const historyRounds = computed(function () {
+        /* 1 轮 = 两条消息；最后一条在等 AI 回复时算半轮，向上凑一轮 */
+        return Math.ceil(messages.value.length / 2);
+      });
+      const sentRounds = computed(function () {
+        return Math.min(rounds.value, historyRounds.value);
+      });
+      const sentMessages = computed(function () {
+        return Math.min(messages.value.length, rounds.value * 2);
+      });
+
+      function openSettings() {
+        showMenu.value = false;
+        editingRounds.value = false;
+        settingsOpen.value = true;
+      }
+
+      function closeSettings() {
+        editingRounds.value = false;
+        settingsOpen.value = false;
+      }
+
+      /* 点数字 → 变成可输入的框（进来就聚焦全选，直接输入就能覆盖） */
+      function editRounds() {
+        roundsDraft.value = String(rounds.value);
+        editingRounds.value = true;
+        nextTick(function () {
+          const input = document.querySelector(".range-num-input");
+          if (input) {
+            input.focus();
+            if (input.select) input.select();
+          }
+        });
+      }
+
+      /* 手输收尾：空的或不是数字就保持原值，其余自动夹到 1 ~ 500 */
+      function commitRounds() {
+        if (!editingRounds.value) return;
+        editingRounds.value = false;
+        const text = String(roundsDraft.value).trim();
+        if (!text) return;
+        const n = Number(text);
+        if (!isFinite(n)) return;
+        rounds.value = n;
+      }
+
+      function cancelEditRounds() {
+        editingRounds.value = false;
+      }
+
+      function resetRounds() {
+        rounds.value = ctx.DEFAULT;
       }
 
       const errorText = ref("");
@@ -325,15 +411,46 @@ window.SN = window.SN || {};
         backToList: backToList,
         send: send,
         stopReply: stopReply,
-        /* 头部导航上报：会话详情时标题显示角色名，返回键回会话列表 */
+        /* 聊天设置页：上下文记忆轮数（拉条 + 可点开手输的数字） */
+        settingsOpen: settingsOpen,
+        editingRounds: editingRounds,
+        roundsDraft: roundsDraft,
+        rounds: rounds,
+        roundsMin: ctx.MIN,
+        roundsMax: ctx.MAX,
+        roundsDefault: ctx.DEFAULT,
+        historyRounds: historyRounds,
+        sentRounds: sentRounds,
+        sentMessages: sentMessages,
+        openSettings: openSettings,
+        closeSettings: closeSettings,
+        editRounds: editRounds,
+        commitRounds: commitRounds,
+        cancelEditRounds: cancelEditRounds,
+        resetRounds: resetRounds,
+        /* 头部导航上报：会话详情时标题显示角色名，返回键回会话列表；
+           聊某个角色时右上角多一个「···」（进聊天设置），设置页里则收起 */
         navTitle: computed(function () {
+          if (settingsOpen.value) return "聊天设置";
           return activeCharacter.value ? activeCharacter.value.name : "";
         }),
         navIsSub: computed(function () {
           return Boolean(activeCharacter.value);
         }),
-        navBack: backToList,
-        navBackLabel: "会话"
+        navBack: function () {
+          if (settingsOpen.value) closeSettings();
+          else backToList();
+        },
+        navBackLabel: computed(function () {
+          return settingsOpen.value ? "聊天" : "会话";
+        }),
+        navActions: computed(function () {
+          if (!activeCharacter.value || settingsOpen.value) return [];
+          return [{ key: "chatSettings", glyph: "dots", label: "聊天设置" }];
+        }),
+        navAction: function (key) {
+          if (key === "chatSettings") openSettings();
+        }
       };
     },
     template: `
@@ -356,6 +473,39 @@ window.SN = window.SN || {};
           </button>
         </div>
         <p class="empty" v-if="!filteredCharacters.length && search.trim()">没有找到名字里含「{{ search.trim() }}」的会话</p>
+      </div>
+
+      <!-- 聊天设置页：只针对当前这个角色（从右上角「···」进来） -->
+      <div class="chat-settings" v-else-if="settingsOpen">
+        <p class="section-title">上下文记忆 · {{ activeCharacter.name }}</p>
+        <div class="list">
+          <div class="row">
+            <span class="row__main">
+              <span class="row__label">记忆轮数</span>
+              <span class="row__sub">1 轮 = 你 1 条 + AI 1 条 · 最多 {{ roundsMax }} 轮</span>
+            </span>
+          </div>
+          <div class="row">
+            <input class="range range--wide" type="range" :min="roundsMin" :max="roundsMax" step="1"
+              aria-label="记忆轮数" v-model.number="rounds" />
+            <button v-if="!editingRounds" class="range-num" type="button" title="点一下手动输入轮数"
+              aria-label="手动输入记忆轮数" @click="editRounds">{{ rounds }}<span class="range-num__unit">轮</span></button>
+            <input v-else class="input range-num-input" type="number" inputmode="numeric"
+              :min="roundsMin" :max="roundsMax" aria-label="记忆轮数" v-model="roundsDraft"
+              @keyup.enter="commitRounds" @keyup.esc="cancelEditRounds" @blur="commitRounds" />
+          </div>
+        </div>
+        <p class="field__hint">
+          这段对话已有 {{ historyRounds }} 轮；下次发送会带上最近 {{ sentRounds }} 轮（{{ sentMessages }} 条消息）。
+        </p>
+        <p class="field__hint">
+          带上的历史会放在「记忆库」等设定之后、「你这次发的消息」之前，所以 AI 记得你们之前聊过什么。轮数越大越费 token。
+        </p>
+        <div class="btn-row">
+          <button class="btn" type="button" :disabled="rounds === roundsDefault" @click="resetRounds">
+            恢复默认（{{ roundsDefault }} 轮）
+          </button>
+        </div>
       </div>
 
       <div class="chat" v-else>
@@ -1476,6 +1626,11 @@ window.SN = window.SN || {};
       const loadingModels = ref(false);
       const modelsError = ref("");
 
+      /* 上下文记忆轮数（按角色在「聊天设置」里调）的默认值与上限，只用来写说明文字 */
+      const roundsCfg = SN.contextRounds || { default: 100, max: 500 };
+      const contextRoundsDefault = roundsCfg.default;
+      const contextRoundsMax = roundsCfg.max;
+
       function fetchModels() {
         if (loadingModels.value) return;
         loadingModels.value = true;
@@ -1593,6 +1748,8 @@ window.SN = window.SN || {};
         stats: stats,
         subPage: subPage,
         openSub: openSub,
+        contextRoundsDefault: contextRoundsDefault,
+        contextRoundsMax: contextRoundsMax,
         changelog: SN.changelog,
         /* 头部导航上报：子页时标题显示对应名字，返回键回设置主列表 */
         navTitle: computed(function () {
@@ -1707,10 +1864,9 @@ window.SN = window.SN || {};
         </div>
         <div class="row">
           <span class="row__main">
-            <span class="row__label">携带最近聊天</span>
-            <span class="row__sub">最近 {{ settings.api.contextCount }} 条</span>
+            <span class="row__label">上下文记忆</span>
+            <span class="row__sub">按角色单独设置：聊天页右上角「···」→ 聊天设置（默认 {{ contextRoundsDefault }} 轮，上限 {{ contextRoundsMax }} 轮）</span>
           </span>
-          <input class="range" type="range" min="4" max="50" step="2" v-model.number="settings.api.contextCount" />
         </div>
         <div class="row">
           <span class="row__main">

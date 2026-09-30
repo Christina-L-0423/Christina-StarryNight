@@ -205,6 +205,146 @@ async function boot() {
   await closeApp();
   say('chat list: flush edges, row time, 14-char preview, time stamps');
 
+  /* 聊天设置：角色聊天页右上角（和返回键同一排）的「···」→ 这个角色专属的设置页，
+     里面只有一件事：上下文记忆轮数（拉条 + 右边的数字，两边都能改，默认 100 轮 / 上限 500 轮）。 */
+  await openApp('chat');
+  equal('the conversation list has no header action button', await evaluate(`document.querySelectorAll('.app-header .header-btn').length`), 0);
+  await evaluate(`[...document.querySelectorAll('.list--flush .row')].filter(function(r){return r.textContent.indexOf('Christina')!==-1;})[0].click()`);
+  await until('chat page opened', `!!document.querySelector('.chat__list')`);
+  await wait(300);
+
+  const dots = await evaluate(`(() => { const b=document.querySelector('.app-header .header-btn'); const t=document.querySelector('.app-header__title'); const bar=document.querySelector('.app-header__bar'); if(!b||!t||!bar) return null; const br=b.getBoundingClientRect(), tr=t.getBoundingClientRect(), hb=bar.getBoundingClientRect(); return { label:b.getAttribute('aria-label'), title:t.textContent.trim(), glyph:!!b.querySelector('svg.glyph'), sameRow:Math.abs((br.top+br.height/2)-(tr.top+tr.height/2))<=2, rightGap:Math.round(hb.right-br.right) }; })()`);
+  ok('the character chat page has a header action button', dots, 'no .app-header .header-btn');
+  equal('the header action is the chat-settings entry', dots.label, '聊天设置');
+  ok('the header action draws a glyph (three dots)', dots.glyph, dots);
+  ok('the header action sits in the same row as the exit key', dots.sameRow, dots);
+  ok('the header action is pinned to the right edge of the header', dots.rightGap <= 22, dots);
+  equal('the chat title is still the character name', dots.title, 'Christina');
+  say('chat settings: the character chat page carries a right-aligned ... entry');
+
+  await evaluate(`document.querySelector('.app-header .header-btn').click()`);
+  await until('chat settings page opened', `!!document.querySelector('.chat-settings')`);
+  await wait(200);
+  const settingsUi = await evaluate(`(() => { const s=document.querySelector('.chat-settings'); if(!s) return null; const r=s.querySelector('input.range'); const n=s.querySelector('.range-num'); return { title:document.querySelector('.app-header__title').textContent.trim(), dots:document.querySelectorAll('.app-header .header-btn').length, composer:document.querySelectorAll('.composer').length, min:r?r.getAttribute('min'):'', max:r?r.getAttribute('max'):'', value:r?Number(r.value):-1, num:n?n.textContent.replace(/[^0-9]/g,''):'', stored:Object.keys(JSON.parse(JSON.stringify(SN.store.state.chatSettings||{}))).length, text:s.textContent.replace(/\\s+/g,' ') }; })()`);
+  ok('the three dots opens the chat-settings page', settingsUi, 'no .chat-settings');
+  equal('the settings page is titled 聊天设置', settingsUi.title, '聊天设置');
+  equal('the dots entry folds away on the settings page itself', settingsUi.dots, 0);
+  equal('the chat composer is not part of the settings page', settingsUi.composer, 0);
+  equal('the memory slider min is 1 round', settingsUi.min, '1');
+  equal('the memory slider max is 500 rounds', settingsUi.max, '500');
+  equal('memory rounds default to 100', settingsUi.value, 100);
+  equal('the number at the right of the slider reads 100', settingsUi.num, '100');
+  equal('nothing is stored until the user changes it', settingsUi.stored, 0);
+  ok('the page explains what a round is', settingsUi.text.indexOf('1 轮 = 你 1 条 + AI 1 条') !== -1, settingsUi.text);
+
+  /* 记忆轮数的读写逻辑（logic/prompt.js 的 SN.logic.context）：默认值 + 夹在 1 ~ 500 */
+  equal('a character without its own setting uses the default', await evaluate(`SN.logic.context.rounds('zz_nobody')`), 100);
+  equal('the clamp keeps values inside 1 ~ 500', await evaluate(`[SN.logic.context.clamp(-5), SN.logic.context.clamp(0), SN.logic.context.clamp(9999), SN.logic.context.clamp('')].join(',')`), '1,1,500,100');
+  say('chat settings: 1 ~ 500 rounds, default 100, nothing stored until changed');
+
+  /* 拉条：headless 里原生滑块跟着「触摸拖动」走（移动端模拟下，第一下合成鼠标按下只会激活页面，
+     不会落到滑块上，所以这里用触摸事件模拟手指），从 25% 拖到 60%。 */
+  const sliderBox = await evaluate(`(() => { const r=document.querySelector('.chat-settings input.range'); const b=r.getBoundingClientRect(); return { left:b.left, width:b.width, y:b.top+b.height/2 }; })()`);
+  ok('the memory slider is a wide bar (not the 118px mini slider)', sliderBox.width > 180, sliderBox);
+  const sliderValue = () => evaluate(`Number(document.querySelector('.chat-settings input.range').value)`);
+  const dragX = [0.25, 0.42, 0.6].map(function (fraction) { return sliderBox.left + sliderBox.width * fraction; });
+  await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+  await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: dragX[0], y: sliderBox.y, id: 1 }] });
+  await wait(90);
+  const started = await sliderValue();
+  await send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: dragX[1], y: sliderBox.y, id: 1 }] });
+  await wait(90);
+  const midDrag = await sliderValue();
+  await send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: dragX[2], y: sliderBox.y, id: 1 }] });
+  await wait(90);
+  await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await wait(220);
+  await send('Emulation.setTouchEmulationEnabled', { enabled: false });
+  const dragged = await sliderValue();
+  ok('the memory slider jumps to where the finger lands (~25% of the track)', Math.abs(started - 125) < 45, started);
+  ok('the memory slider follows the finger while dragging', midDrag > started + 30, { started: started, midDrag: midDrag });
+  ok('the memory slider settles around 60% of the track', Math.abs(dragged - 300) < 50, dragged);
+  equal('dragging the slider stores the per-character rounds', await evaluate(`SN.store.state.chatSettings.christina.contextRounds`), dragged);
+  equal('the number follows the slider', await evaluate(`Number(document.querySelector('.chat-settings .range-num').textContent.replace(/[^0-9]/g,''))`), dragged);
+  say('chat settings: the memory slider drags and stores per character');
+
+  /* 数字：点一下变成输入框 → 手输 137 → 拉条跟着走 */
+  await evaluate(`document.querySelector('.chat-settings .range-num').click()`);
+  await until('the number turned into an input', `!!document.querySelector('.chat-settings .range-num-input')`);
+  await wait(150);
+  const numField = await evaluate(`(() => { const i=document.querySelector('.chat-settings .range-num-input'); return { type:i.type, focused:document.activeElement===i, limits:i.getAttribute('min')+'-'+i.getAttribute('max') }; })()`);
+  equal('the number becomes a number field', numField.type, 'number');
+  ok('the field opens focused, so typing replaces the value', numField.focused, numField);
+  equal('the field carries the same 1 ~ 500 limits', numField.limits, '1-500');
+  await evaluate(`(() => { const i=document.querySelector('.chat-settings .range-num-input'); i.value='137'; i.dispatchEvent(new Event('input',{bubbles:true})); i.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',bubbles:true})); return 1; })()`);
+  await wait(250);
+  equal('a custom round count typed by hand is stored', await evaluate(`SN.store.state.chatSettings.christina.contextRounds`), 137);
+  equal('the slider jumps to the typed value', await evaluate(`Number(document.querySelector('.chat-settings input.range').value)`), 137);
+  equal('the number shows the typed value again', await evaluate(`document.querySelector('.chat-settings .range-num').textContent.replace(/[^0-9]/g,'')`), '137');
+
+  async function typeRounds(text) {
+    await evaluate(`document.querySelector('.chat-settings .range-num').click()`);
+    await until('the number turned into an input', `!!document.querySelector('.chat-settings .range-num-input')`);
+    await evaluate(`(() => { const i=document.querySelector('.chat-settings .range-num-input'); i.value=${JSON.stringify(text)}; i.dispatchEvent(new Event('input',{bubbles:true})); i.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',bubbles:true})); return 1; })()`);
+    await wait(220);
+    return evaluate(`SN.store.state.chatSettings.christina.contextRounds`);
+  }
+  equal('typing above the ceiling clamps to 500 rounds', await typeRounds('9999'), 500);
+  equal('typing below the floor clamps to 1 round', await typeRounds('0'), 1);
+  equal('an empty input keeps the previous value', await typeRounds(''), 1);
+  await evaluate(`[...document.querySelectorAll('.chat-settings .btn')][0].click()`);
+  await wait(250);
+  equal('the reset button puts it back to the default 100 rounds', await evaluate(`SN.store.state.chatSettings.christina.contextRounds`), 100);
+  say('chat settings: the number can be typed by hand (1 ~ 500, back to default)');
+
+  /* 轮数真的影响请求：20 轮历史 + 一条待回复的消息，设成 3 轮 →
+     1 条系统提示词 + 6 条历史（最近 3 轮）；记忆留在系统提示词里，本条用户消息压尾。 */
+  await evaluate(`(() => { const list=[]; for (let i=0;i<20;i+=1) { list.push({role:'me',text:'我'+i,ts:Date.now()}); list.push({role:'them',text:'你'+i,ts:Date.now()}); } SN.store.state.chats.christina=list; SN.store.state.memoryBank=[{id:'mem_test',text:'用户住在杭州',keywords:['杭州'],pinned:true,enabled:true}]; return list.length; })()`);
+  await evaluate(`SN.logic.context.setRounds('christina', 3)`);
+  await wait(200);
+  await evaluate(`SN.store.pushMessage('christina','me','这条还在等回复')`);
+  await wait(250);
+  const request = await evaluate(`(() => { const ms=SN.api.buildMessages('christina'); return { total:ms.length, roles:ms.map(function(m){return m.role;}).join(','), first:ms[1].content, last:ms[ms.length-1].content, memoryInSystem:ms[0].content.indexOf('用户住在杭州')!==-1, memoryInHistory:ms.slice(1).some(function(m){return String(m.content).indexOf('用户住在杭州')!==-1;}) }; })()`);
+  equal('3 rounds = 6 history messages after the system prompt', request.total, 7);
+  equal('the history sits between the memory prompt and the current user message', request.roles, 'system,assistant,user,assistant,user,assistant,user');
+  equal('only the newest rounds are carried', request.first, '你17');
+  equal('the current user message goes last', request.last, '这条还在等回复');
+  ok('memory stays inside the system prompt (before the history)', request.memoryInSystem);
+  equal('memory is never repeated as a chat message', request.memoryInHistory, false);
+  say('chat settings: 3 rounds -> 6 history messages, memory first, current message last');
+
+  /* 每个角色各存各的 + 随 localStorage / 备份走；旧的全局「携带最近聊天」已经下线 */
+  await wait(450);
+  const persisted = await evaluate(`(() => { const s=SN.store.snapshot(); const raw=JSON.parse(localStorage.getItem('starrynight.state.v1')||'{}'); return { snap:s.chatSettings, disk:raw.chatSettings, legacy:Object.prototype.hasOwnProperty.call(s.settings.api||{},'contextCount') }; })()`);
+  equal('per-character rounds land in the snapshot', persisted.snap.christina.contextRounds, 3);
+  equal('per-character rounds land in localStorage', persisted.disk.christina.contextRounds, 3);
+  equal('the old global context slider is retired from the data', persisted.legacy, false);
+  say('chat settings: rounds survive in the snapshot + localStorage, old global slider retired');
+
+  /* 返回键：设置页 → 聊天页 →（再按一次）会话列表；「···」只在聊天页出现 */
+  await evaluate(`document.querySelector('.back-btn').click()`);
+  await wait(400);
+  ok('the settings back key returns to the chat itself', await evaluate(`!!document.querySelector('.chat__list') && !document.querySelector('.chat-settings')`));
+  ok('the dots entry is back on the chat page', await evaluate(`!!document.querySelector('.app-header .header-btn')`));
+  equal('the title is the character name again', await evaluate(`document.querySelector('.app-header__title').textContent.trim()`), 'Christina');
+  await evaluate(`document.querySelector('.back-btn').click()`);
+  await wait(400);
+  ok('the next back key leaves the chat for the conversation list', await evaluate(`!!document.querySelector('.list--flush .row') && document.querySelectorAll('.app-header .header-btn').length === 0`));
+  await closeApp();
+  say('chat settings: back key walks settings -> chat -> list');
+
+  /* 设置 → API：旧的全局「携带最近聊天」滑块退休，只留一行指路文字（记忆改成按角色设置） */
+  await openApp('settings');
+  await evaluate(`document.querySelectorAll('.list .row')[0].click()`);
+  await wait(450);
+  const apiPage = await evaluate(`(() => { const body=document.querySelector('.app-body'); return { title:document.querySelector('.app-header__title').textContent.trim(), sliders:body.querySelectorAll('input[type=range]').length, legacy:body.textContent.indexOf('携带最近聊天')!==-1, pointer:body.textContent.indexOf('聊天页右上角')!==-1 && body.textContent.indexOf('100 轮')!==-1 }; })()`);
+  equal('the API subpage still opens', apiPage.title, 'API');
+  equal('the API page no longer offers the global history slider', apiPage.legacy, false);
+  equal('the API page keeps only temperature + length sliders', apiPage.sliders, 2);
+  equal('the API page points at the per-character chat settings', apiPage.pointer, true);
+  await closeApp();
+  say('settings/API: global history slider retired, a pointer to chat settings remains');
+
   // 角色集：竖向居中角色卡 + 简介；角色编辑有「简介」字段；简介不进提示词。
   const promptSrc = fs.readFileSync(path.join(root, 'assets/js/logic/prompt.js'), 'utf8');
   ok('prompt.js never reads intro (简介不发 AI)', !/\bintro\b/.test(promptSrc));

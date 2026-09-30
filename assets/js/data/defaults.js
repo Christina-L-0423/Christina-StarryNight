@@ -185,7 +185,6 @@ window.SN = window.SN || {};
       model: "",
       temperature: 0.8,
       maxTokens: 1024,
-      contextCount: 20,
       stream: true
     },
     /* 天气与位置 */

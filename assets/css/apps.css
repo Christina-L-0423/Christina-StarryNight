@@ -26,6 +26,37 @@
   flex: none;
 }
 
+/* 页头一行：左边是 [箭头 + 大标题]（整块可点返回），右边留给页面自己的操作键
+   （目前只有聊天页角色详情右上角的「···」→ 聊天设置） */
+.app-header__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* 长角色名时大标题要能缩窄（省略号），而不是把右边的操作键挤出屏幕 */
+.app-header__bar .back-btn {
+  min-width: 0;
+}
+
+/* 页头右侧的小按钮：和返回键同一排、同一种线条图标风格，没有磨砂底 */
+.header-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: var(--text-1);
+  transition: opacity 0.2s ease;
+}
+
+.header-btn:active {
+  opacity: 0.45;
+}
+
 .back-btn {
   display: inline-flex;
   align-items: center;
@@ -782,6 +813,50 @@
   border: 0;
   border-radius: 50%;
   background: #fff;
+}
+
+/* 聊天设置里的拉条：占满一整行，右边留给数字 */
+.range--wide {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+
+/* 拉条右边的数字（点一下就能手动输入轮数） */
+.range-num {
+  flex: none;
+  min-width: 62px;
+  padding: 5px 8px;
+  border-radius: 10px;
+  background: var(--card-bg-hover);
+  border: 0.5px solid var(--hairline);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1);
+  text-align: center;
+  transition: transform 0.15s var(--ease);
+}
+
+.range-num:active {
+  transform: scale(0.96);
+}
+
+.range-num__unit {
+  margin-left: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+/* 数字被点开后的输入框：宽度和数字差不多，固定在拉条右边 */
+.range-num-input {
+  flex: none;
+  width: 72px;
+  padding: 6px 8px;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
 }
 
 /* 世界书正文允许换行 */
