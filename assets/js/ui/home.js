@@ -13,6 +13,8 @@
       const SLOTS = COLS * ROWS;
       const MAX_ROW = ROWS - WSPAN; /* 小组件最高能停的行号 */
       const MAX_PAGES = 5;
+      /* 小组件开关（config.js 的 SN.homeWidgetEnabled）：暂时关掉时它整块不渲染，24 格全给图标用 */
+      const WIDGET_ON = SN.homeWidgetEnabled === true;
       let serial = 0;
       function makePage(slots) {
         return { key: ++serial, slots: slots || Array(SLOTS).fill(null) };
@@ -71,6 +73,7 @@
       }
       /* 这个槽位是否被该页上的小组件占着 */
       function isWidgetSlot(slotIndex, pageIndex) {
+        if (!WIDGET_ON) return false; /* 小组件关掉时没有任何格子被占住，24 格全给图标 */
         return widget.value.page === pageIndex && widgetSlots(widget.value).indexOf(slotIndex) !== -1;
       }
       /* 把被小组件压住的图标搬到最近空位（先扫自己这一页 → 再顺着往后 → 最后回头 → 满了就新开一页） */
@@ -103,6 +106,24 @@
         });
       }
       relocateCovered(); /* 旧数据迁移：如果小组件恰好压在图标上，把图标挪开 */
+      /* 小组件暂时关掉时的一次性整理：原来被小组件挤到第 3 行往下的图标往上压实，顶端不留空洞。
+         只做一次（homeWidgetOff 标记），之后用户自己摆的位置不再被改动；
+         把开关改回 true 时小组件回到原来那两行，被压住的图标也会照旧自动腾到空位。 */
+      (function compactIconsOnce() {
+        if (WIDGET_ON || store.state.settings.homeWidgetOff) return;
+        const ids = [];
+        layout.value.forEach(function (pg) {
+          pg.slots.forEach(function (id) { if (id) ids.push(id); });
+        });
+        layout.value.forEach(function (pg) { pg.slots.fill(null); });
+        ids.forEach(function (id, i) {
+          const pi = Math.floor(i / SLOTS);
+          if (pi < layout.value.length) layout.value[pi].slots[i % SLOTS] = id;
+        });
+        store.state.settings.homeWidgetOff = true;
+        persistLayout();
+        if (store.persistNow) store.persistNow();
+      })();
       function persistLayout() {
         store.state.settings.homeLayout = layout.value.map(function (p) { return p.slots.slice(); });
       }
@@ -456,7 +477,7 @@
         return dragging.value.page === pi && (r === dragging.value.row || r === dragging.value.row + 1);
       }
       return {
-        SLOTS: SLOTS, layout: layout, page: page, editing: editing,
+        SLOTS: SLOTS, layout: layout, page: page, editing: editing, widgetOn: WIDGET_ON,
         dragging: dragging, hover: hover, pagerEl: pagerEl, trackStyle: trackStyle,
         widget: widget, moving: moving, ghostStyle: ghostStyle, wrow: wrow,
         isHoverCell: isHoverCell, isWidgetHover: isWidgetHover,
@@ -473,15 +494,16 @@
           <div class="home__track" :style="trackStyle">
             <div class="home__page" v-for="(p, pi) in layout" :key="p.key" :inert="pi !== page">
               <!-- 小组件跟图标一样住在网格里：占 4×2（整行宽、跨 2 行），可以在任意页的任意行。
-                   用 grid-row: span 2 一次占住两行，不再需要额外的占位格子，翻页时行列自然对齐。 -->
+                   用 grid-row: span 2 一次占住两行，不再需要额外的占位格子，翻页时行列自然对齐。
+                   注意：config.js 里 SN.homeWidgetEnabled = false（暂时下线）时 widgetOn 为假，整块不渲染。 -->
               <div class="home__grid">
                 <template v-for="r in 6" :key="'r' + r">
-                  <div v-if="widget.page === pi && r - 1 === widget.row" class="home__cell home__cell--widget"
+                  <div v-if="widgetOn && widget.page === pi && r - 1 === widget.row" class="home__cell home__cell--widget"
                        data-widget-slot :data-page="pi" :data-row="widget.row"
                        :class="{ 'is-holding': isWidgetSource(pi), 'is-drop': isWidgetDrop(r - 1, pi), 'is-whover': isWidgetHover(r - 1, pi) }">
                     <sn-widget></sn-widget>
                   </div>
-                  <template v-else-if="widget.page === pi && r - 1 === widget.row + 1"></template>
+                  <template v-else-if="widgetOn && widget.page === pi && r - 1 === widget.row + 1"></template>
                   <template v-else>
                     <div v-for="c in 4" :key="'c' + c" class="home__cell" data-slot
                          :data-page="pi" :data-index="(r - 1) * 4 + (c - 1)"

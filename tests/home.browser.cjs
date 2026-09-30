@@ -148,18 +148,30 @@ async function boot() {
 (async () => {
   await boot();
   ok('SN.store exposed', await evaluate('!!window.SN && !!SN.store'));
+  /* 小组件开关（config.js → SN.homeWidgetEnabled）：关掉时桌面 24 格全给图标，
+     下面所有和小组件有关的场景整体跳过，重新打开会自动继续跑。 */
+  const widgetOn = await evaluate('SN.homeWidgetEnabled === true');
+  say('home widget switch: ' + (widgetOn ? 'on (4x2 in the grid)' : 'off (config.js SN.homeWidgetEnabled = false)'));
   const expected = await evaluate('SN.apps.map(function(a){return a.name;})');
   same('every app rendered somewhere in the grid', (await slots()).filter(Boolean), expected);
-  const size = await evaluate(`(() => { const g=document.querySelector('.home__grid').getBoundingClientRect(); const rh=g.height/6; const pages=[...document.querySelectorAll('.home__page')]; const w=document.querySelector('.home__cell--widget'); const wt=w.querySelector('.widget'); const icons=[...pages[0].querySelectorAll('[data-slot]')]; const h=icons.map(el=>el.getBoundingClientRect().height); const bands=[...new Set(icons.map(function(el){return Math.round((el.getBoundingClientRect().top-g.top)/rh);}))]; const wbands=[...new Set([].concat.apply([],[...pages[0].querySelectorAll('.home__cell--widget,.home__cell--widget-ghost')].map(function(el){return [Math.round((el.getBoundingClientRect().top-g.top)/rh),Math.round((el.getBoundingClientRect().bottom-g.top)/rh)];})))]; return {grid:Math.round(g.height),row:Math.round(rh),min:Math.round(Math.min.apply(null,h)),iconCells:icons.length,rowBands:bands.length,widgetBands:wbands.length,widgetTop:Math.round(wt.getBoundingClientRect().top-g.top),gw:Math.round(g.width),ww:Math.round(wt.getBoundingClientRect().width),wh:Math.round(wt.getBoundingClientRect().height),slotsPerBand:icons.length/4}; })()`);
-  equal('grid is 4 columns x 6 rows (24 slots)', size.slotsPerBand, 4);
-  equal('widget covers 4x2 = two whole rows', size.widgetBands, 2);
-  equal('widget glass spans the full grid width (4 columns wide)', size.ww, size.gw);
-  ok('widget glass fills both rows (a real 4x2 card, not content-sized)', Math.abs(size.wh - size.row * 2) <= 2, size);
-  equal('the other four rows hold 4x4 = 16 icon cells', size.iconCells, 16);
+  const size = await evaluate(`(() => { const gel=document.querySelector('.home__grid'); const g=gel.getBoundingClientRect(); const cs=getComputedStyle(gel); const rh=g.height/6; const pages=[...document.querySelectorAll('.home__page')]; const w=document.querySelector('.home__cell--widget'); const wt=w?w.querySelector('.widget'):null; const icons=[...pages[0].querySelectorAll('[data-slot]')]; const h=icons.map(el=>el.getBoundingClientRect().height); const bands=[...new Set(icons.map(function(el){return Math.round((el.getBoundingClientRect().top-g.top)/rh);}))]; const wbands=[...new Set([].concat.apply([],[...pages[0].querySelectorAll('.home__cell--widget,.home__cell--widget-ghost')].map(function(el){return [Math.round((el.getBoundingClientRect().top-g.top)/rh),Math.round((el.getBoundingClientRect().bottom-g.top)/rh)];})))]; return {grid:Math.round(g.height),row:Math.round(rh),min:Math.round(Math.min.apply(null,h)),iconCells:icons.length,cols:cs.gridTemplateColumns.split(' ').filter(Boolean).length,rows:cs.gridTemplateRows.split(' ').filter(Boolean).length,rowBands:bands.length,widgetBands:wbands.length,hasWidget:!!wt,widgetTop:wt?Math.round(wt.getBoundingClientRect().top-g.top):-1,gw:Math.round(g.width),ww:wt?Math.round(wt.getBoundingClientRect().width):-1,wh:wt?Math.round(wt.getBoundingClientRect().height):-1}; })()`);
+  equal('grid is 4 columns wide', size.cols, 4);
+  equal('grid has 6 rows (4 x 6 tracks = 24 slots)', size.rows, 6);
   ok('all six rows are usable and compact', size.grid >= 456 && size.min >= 60 && size.row >= 76, size);
-  equal('icons span the four free row bands', size.rowBands, 4);
-  ok('widget starts on a grid row', size.widgetTop % size.row <= 1, size);
-  say('boot: 4x6 grid (24 slots, widget = 4x2), all apps rendered');
+  if (widgetOn) {
+    equal('widget covers 4x2 = two whole rows', size.widgetBands, 2);
+    equal('widget glass spans the full grid width (4 columns wide)', size.ww, size.gw);
+    ok('widget glass fills both rows (a real 4x2 card, not content-sized)', Math.abs(size.wh - size.row * 2) <= 2, size);
+    equal('the other four rows hold 4x4 = 16 icon cells', size.iconCells, 16);
+    equal('icons span the four free row bands', size.rowBands, 4);
+    ok('widget starts on a grid row', size.widgetTop % size.row <= 1, size);
+    say('boot: 4x6 grid (24 slots, widget = 4x2), all apps rendered');
+  } else {
+    equal('widget off: no widget cell is rendered', size.hasWidget, false);
+    equal('widget off: all 24 slots are icon cells', size.iconCells, 24);
+    equal('widget off: icons span all six row bands', size.rowBands, 6);
+    say('boot: 4x6 grid (24 slots, widget off in config.js), all apps rendered');
+  }
 
   /* 会话列表：超长预览必须截断成一行，不能压到右边箭头上（用户上报的 bug）。 */
   const iconSlot = (await slots()).findIndex(Boolean);
@@ -280,15 +292,22 @@ async function boot() {
   await closeApp();
   say('stats moved into settings as its own row');
 
-  const first = (await slots())[8];
-  ok('slot 8 holds an icon (the widget rows push icons away)', first);
-  await dropIcon(8, 23);
+  /* 第一个有图标的格子：小组件开着时是被它挤下来的第 8 格（第 3 行），关掉时就是第 0 格 —— 两种都测 */
+  await evaluate(`document.querySelectorAll('.home__dot')[0].click()`);
+  await wait(450);
+  const occupied = (await slots()).findIndex(Boolean);
+  const destSlot = 23;
+  const first = (await slots())[occupied];
+  const firstId = await evaluate(`SN.apps.filter(function (a) { return a.name === ${JSON.stringify(first)}; })[0].id`);
+  ok('the first occupied slot holds an icon', first, occupied);
+  equal('and that icon is the first app in the list', firstId, await evaluate('SN.apps[0].id'));
+  await dropIcon(occupied, destSlot);
   let now = await slots();
-  equal('source slot is now empty', now[8], null);
-  equal('icon landed in slot 23', now[23], first);
+  equal('source slot is now empty', now[occupied], null);
+  equal('icon landed in slot 23', now[destSlot], first);
   const saved = await evaluate('SN.store.snapshot().settings.homeLayout');
-  equal('empty slot persisted', saved[0][8], null);
-  equal('dropped slot persisted', saved[0][23], await evaluate('SN.apps[0].id'));
+  equal('empty slot persisted', saved[0][occupied], null);
+  equal('dropped slot persisted', saved[0][destSlot], firstId);
   /* 布局里不能出现重复图标（小组件压住图标时旧代码只搬不腾空，会留下同一个 id 的两份） */
   equal('layout has no duplicated icons', new Set(saved[0].filter(Boolean)).size, saved[0].filter(Boolean).length);
   const empty = await evaluate(`(() => { const s=SN.store.snapshot().settings.homeLayout[0]; return s.filter(function (x) { return !x; }).length; })()`);
@@ -353,7 +372,10 @@ async function boot() {
   equal('icon landed in the new leading page', (await slots())[0], iconLabel);
   say('left edge inserts a page before the current one');
 
-  // 小组件：和图标一样住在网格里 —— 可以停在任意一行（不再只有最上或最下），拖到边缘跟着换页，位置随备份走。
+  if (!widgetOn) say('widget scenarios skipped: the widget is switched off in config.js');
+  /* 小组件：和图标一样住在网格里 —— 可以停在任意一行（不再只有最上或最下），拖到边缘跟着换页，位置随备份走。
+     （下面这一大段整体受 widgetOn 控制：关掉小组件时跳过；块内不再额外缩进，方便整段开关。） */
+  if (widgetOn) {
   const widgetCenter = () => evaluate(`(() => { const w=document.querySelector('.home__cell--widget .widget'); if(!w) return null; const r=w.getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2}; })()`);
   let wpos = await widgetAt();
   await evaluate(`document.querySelectorAll('.home__dot')[${wpos.page}].click()`);
@@ -420,6 +442,7 @@ async function boot() {
   await wait(250);
   equal('widget follows the page flip at the edge', (await widgetAt()).page, before + 1);
   say('widget moves to another page via the edge');
+  }
 
   // 编辑模式下点图标不打开应用；按「完成」退出后再点才会打开（用户上报的第 2 个 bug）。
   await evaluate(`document.querySelector('.home__done').click()`);

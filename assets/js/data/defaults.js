@@ -198,6 +198,11 @@ window.SN = window.SN || {};
     /* 桌面分页布局（数组的数组，元素是 app id）；空 = 默认单页顺序。
        在桌面上长按图标进入编辑模式可拖动调整，跟随设置进备份 */
     homeLayout: [],
+    /* 主屏「时间 / 天气」小组件的位置（住在第几页 + 从第几行开始，占 4 × 2 两行）。
+       config.js 里 SN.homeWidgetEnabled = false 时它不显示，但位置先留着，改回 true 就恢复原位 */
+    homeWidget: { page: 0, row: 0 },
+    /* 小组件下线后是否已经做过「图标上移压实」的一次性整理（见 ui/home.js） */
+    homeWidgetOff: false,
     /* Dock 栏（底部）是否显示应用名称 */
     dockLabels: true,
     /* 桌面（主屏）是否显示应用名称 */
