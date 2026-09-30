@@ -784,12 +784,6 @@
   background: #fff;
 }
 
-/* 被接管的手动值（例如打开「读取本机电量」后，状态栏电量的滑块就没用了） */
-.range:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
 /* 世界书正文允许换行 */
 .row__sub--wrap {
   white-space: normal;

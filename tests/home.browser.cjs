@@ -308,84 +308,50 @@ async function boot() {
   await closeApp();
   say('beautify: my-wallpaper thumbnails fit the whole image (cover + centred, 9:16)');
 
-  /* 状态栏电量：默认读真实设备电量（Battery Status API），读不到 / 关掉开关就退回手动值。
+  /* 状态栏电量：读本机真实电量（Battery Status API，见 store.js），界面上没有手动值。
      这个接口在 headless Edge 里可能秒回、也可能被拒绝，两种世界都得能过：
-     手动值那条路一定断言，真实值那条路只在接口可用时额外检查。 */
+     有接口那条路按设备实际电量断言，读不到（含被拒绝）那条路断言固定兜底值。 */
   const apiPresent = await evaluate(`typeof navigator.getBattery === 'function'`);
-  const batteryNow = () => evaluate(`(function () { const b=SN.store.battery.value; const el=document.querySelector('.status-bar .battery'); const fill=el?el.querySelectorAll('svg.glyph rect')[1]:null; return { level:b.level, charging:b.charging, real:b.real, supported:b.supported, manual:SN.store.state.settings.battery, flag:SN.store.state.settings.batteryReal, glyph:!!el, hasBolt:el?!!el.querySelector('.battery__bolt'):false, chargingClass:el?el.classList.contains('is-charging'):false, fill:fill?Number(fill.getAttribute('width')):-1, fillColor:fill?fill.getAttribute('fill'):'' }; })()`);
+  const batteryNow = () => evaluate(`(function () { const b=SN.store.battery.value; const el=document.querySelector('.status-bar .battery'); const fill=el?el.querySelectorAll('svg.glyph rect')[1]:null; return { level:b.level, charging:b.charging, real:b.real, glyph:!!el, hasBolt:el?!!el.querySelector('.battery__bolt'):false, chargingClass:el?el.classList.contains('is-charging'):false, fill:fill?Number(fill.getAttribute('width')):-1, fillColor:fill?fill.getAttribute('fill'):'' }; })()`);
   const stored = key => evaluate(`(JSON.parse(localStorage.getItem('starrynight.state.v1')||'{}').settings||{}).${key}`);
-  /* 等接口回话（没有接口时立刻跳过），最多 2 秒 */
+  /* 等接口回话（接口不可用就没有这一步），最多 2 秒 */
   if (apiPresent) {
     for (let i = 0; i < 40; i += 1) {
-      if (await evaluate('SN.store.battery.value.real || SN.store.battery.value.supported === false')) break;
+      if (await evaluate('SN.store.battery.value.real')) break;
       await wait(50);
     }
   }
-  let batt = await batteryNow();
+  const batt = await batteryNow();
+  const fallback = await evaluate('SN.batteryFallback');
+  ok('config.js exposes a sane fallback level', typeof fallback === 'number' && fallback >= 0 && fallback <= 100, fallback);
   ok('status bar draws the battery glyph', batt.glyph, 'no .status-bar .battery');
-  equal('battery toggle defaults to reading the device', batt.flag, true);
   ok('battery fill width tracks the level', Math.abs(batt.fill - Math.max(2.2, (12.8 * batt.level) / 100)) < 0.2, batt);
   equal('charging bolt shows only while charging', batt.hasBolt, batt.charging && batt.real);
   equal('charging class mirrors the bolt', batt.chargingClass, batt.charging && batt.real);
   if (batt.charging && batt.real) equal('charging fill turns green', batt.fillColor, 'var(--green)');
   else equal('idle fill keeps the status-bar colour', batt.fillColor, 'currentColor');
   if (apiPresent && batt.real) {
-    ok('real device battery level is a percentage', batt.level >= 0 && batt.level <= 100, batt);
-    equal('a real reading also reports the API as supported', batt.supported, true);
+    const device = await evaluate(`navigator.getBattery().then(function (b) { return { level: Math.round(b.level * 100), charging: !!b.charging }; })`);
+    equal('the level is the device battery level', batt.level, device.level);
+    equal('the charging flag is the device one', batt.charging, device.charging);
     say('status bar reads the real device battery (level ' + batt.level + '%, charging ' + batt.charging + ')');
   } else {
-    say('Battery Status API unavailable here -> manual fallback path is the one under test');
+    equal('no usable device reading -> the fixed fallback level', batt.level, fallback);
+    say('Battery Status API unusable here -> the bar falls back to ' + fallback + '%');
   }
 
-  /* 手动路径：关掉开关 → 状态栏改用手动值、充电闪电消失、填充宽度跟着手动值走 */
-  const realBefore = batt.real;
-  await evaluate('SN.store.state.settings.batteryReal = false');
-  await wait(150);
-  await evaluate('SN.store.state.settings.battery = 33');
-  await wait(150);
-  batt = await batteryNow();
-  equal('turning the toggle off falls back to the manual value', batt.real, false);
-  equal('status bar shows the manual percentage', batt.level, 33);
-  equal('manual mode hides the charging bolt', batt.hasBolt, false);
-  ok('status bar redraws at the manual level', Math.abs(batt.fill - 4.224) < 0.2, batt.fill);
-  equal('manual fill keeps the status-bar colour', batt.fillColor, 'currentColor');
-  /* 手动值要真的落盘（store.js 的 watch → localStorage，防抖 300ms） */
-  for (let i = 0; i < 40; i += 1) {
-    if (await stored('battery') === 33) break;
-    await wait(50);
-  }
-  equal('manual battery is persisted', await stored('battery'), 33);
-  equal('the battery toggle is persisted too', await stored('batteryReal'), false);
-  say('battery: real-device reading, manual fallback and persistence all wired');
+  /* 电量设置整个从 settings 里下线：没有手动值、也没有开关，状态栏只认设备电量 + 兜底值 */
+  equal('settings no longer stores a manual battery', await stored('battery'), undefined);
+  equal('settings no longer stores the battery toggle', await stored('batteryReal'), undefined);
+  say('battery: real-device level only, no manual value in settings');
 
-  /* 美化页的两排：开关 + 手动滑块，跟着真实电量状态走 */
+  /* 美化页也不该再有电量相关的行（以前是「读取本机电量」开关 + 「状态栏电量」滑块） */
   await openApp('beautify');
-  const batteryRows = () => evaluate(`(function () { const rows=[...document.querySelectorAll('.row')]; const r=rows.filter(function(x){return x.textContent.indexOf('读取本机电量')!==-1;})[0]; const s=rows.filter(function(x){return x.textContent.indexOf('状态栏电量')!==-1;})[0]; if(!r||!s) return null; const sw=r.querySelector('.switch'); const range=s.querySelector('.range'); const sub=r.querySelector('.row__sub'); return { switchOn:sw?sw.classList.contains('is-on'):null, hint:sub?sub.textContent:'', hasSub:!!sub, label:s.querySelector('.row__label').textContent.trim(), disabled:range?range.disabled:null, value:range?Number(range.value):-1 }; })()`);
-  let rows = await batteryRows();
-  ok('beautify has the read-device-battery row + manual slider', rows, 'rows not found');
-  ok('the row carries its own explanation line', rows.hasSub, rows);
-  equal('the switch mirrors settings.batteryReal (off, as we just set it)', rows.switchOn, false);
-  ok('the row explains where the number comes from', rows.hint.length > 0, rows.hint);
-  equal('plain label while the manual value drives the bar', rows.label, '状态栏电量');
-  equal('manual slider stays usable when the device value is off', rows.disabled, false);
-  equal('slider shows the stored manual value', rows.value, 33);
-  await evaluate(`[...document.querySelectorAll('.row')].filter(function(x){return x.textContent.indexOf('读取本机电量')!==-1;})[0].querySelector('.switch').click()`);
-  await wait(300);
-  const backOn = await batteryNow();
-  equal('the beautify switch writes settings.batteryReal', backOn.flag, true);
-  equal('the switch brings the real battery back', backOn.real, realBefore);
-  rows = await batteryRows();
-  if (realBefore) {
-    equal('manual slider is greyed out while the device value drives the bar', rows.disabled, true);
-    ok('the label marks itself as the manual value', rows.label.indexOf('（手动）') !== -1, rows.label);
-    ok('the hint reports the live device level', rows.hint.indexOf('%') !== -1, rows.hint);
-  } else {
-    equal('no real reading -> slider stays usable', rows.disabled, false);
-    ok('the hint explains why the manual value is used', rows.hint.length > 0, rows.hint);
-  }
-  await evaluate('SN.store.state.settings.battery = 76');
+  const batteryUi = await evaluate(`(function () { const screen=document.querySelector('.app-screen'); const rows=[...screen.querySelectorAll('.row')].filter(function(x){return x.textContent.indexOf('电量')!==-1;}); return { mentions:rows.length, text:rows.map(function(x){return x.textContent.trim();}).join('|'), ranges:screen.querySelectorAll('input[type=range]').length }; })()`);
+  equal('beautify has no battery row left', batteryUi.mentions, 0);
+  equal('beautify has no battery slider left', batteryUi.ranges, 0);
   await closeApp();
-  say('beautify: battery switch + manual slider follow the real device state');
+  say('beautify: the battery rows are gone (the bar follows the device only)');
 
   /* 第一个有图标的格子：小组件开着时是被它挤下来的第 8 格（第 3 行），关掉时就是第 0 格 —— 两种都测 */
   await evaluate(`document.querySelectorAll('.home__dot')[0].click()`);
@@ -557,6 +523,26 @@ async function boot() {
   await closeApp();
   equal('leaving the app does not fall into edit mode', await evaluate(`document.querySelectorAll('.home__pager.is-editing').length`), 0);
   ok('home grid is back', await evaluate(`!!document.querySelector('.home__cell')`));
+  /* 最后再演一次「浏览器根本没有 Battery Status API」的世界（Safari / 部分 Firefox）：
+     在页面脚本跑之前把 navigator.getBattery 摘掉，然后刷新——状态栏必须退回 config.js 的兜底值，
+     不报错、不空白。这一步放在最后，刷新页面不会影响前面的断言。 */
+  await send('Page.enable');
+  const stripper = await send('Page.addScriptToEvaluateOnNewDocument', {
+    source: `try { Object.defineProperty(navigator, 'getBattery', { value: undefined, configurable: true }); } catch (e) {}`
+  });
+  await send('Page.reload', { ignoreCache: true });
+  await until('app rebooted without the Battery Status API', `!!document.querySelector('.home__cell')`, 20000);
+  await wait(250);
+  const noApi = await batteryNow();
+  equal('no API: the browser really lost getBattery', await evaluate(`typeof navigator.getBattery`), 'undefined');
+  equal('no API: the fixed fallback level drives the bar', noApi.level, await evaluate('SN.batteryFallback'));
+  equal('no API: the value is not marked as a real reading', noApi.real, false);
+  equal('no API: no charging bolt either', noApi.hasBolt, false);
+  ok('no API: the status bar still draws a battery glyph', noApi.glyph);
+  ok('no API: the fill width still matches the level', Math.abs(noApi.fill - Math.max(2.2, (12.8 * noApi.level) / 100)) < 0.2, noApi);
+  await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: stripper.identifier });
+  say('battery: without the Battery Status API the bar falls back to ' + noApi.level + '%');
+
   same('no console errors during the whole run', errors, []);
   say('open/close app does not fall into edit mode');
   console.log('ALL BROWSER CHECKS PASSED');
