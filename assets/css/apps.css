@@ -564,6 +564,13 @@
   border: 2px solid transparent;
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.25);
   transition: transform 0.18s var(--ease), border-color 0.2s ease;
+  /* 「我的壁纸」的缩略图是一张原尺寸大图（压缩后最长边还有 1600px）。
+     不写 background-size 的话，图片按原始像素铺在 100×180 的小格子里，
+     只会露出左上角一小块、还会平铺重复 —— 看起来就是「预览不全」。
+     这里跟应用图标 / 手机壁纸一样：等比铺满 + 居中，不重复、不变形。 */
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 .wallpaper-pick__item:active {

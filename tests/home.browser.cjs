@@ -292,6 +292,22 @@ async function boot() {
   await closeApp();
   say('stats moved into settings as its own row');
 
+  /* 美化 →「我的壁纸」缩略图：自定义壁纸是压缩后仍有 1600px 的大图，
+     缩略图必须 cover 居中铺满，否则只会露出左上角一小块（用户上报的 bug）。 */
+  await evaluate(`(function () { const c=document.createElement('canvas'); c.width=900; c.height=1600; const x=c.getContext('2d'); x.fillStyle='#e8483f'; x.fillRect(0,0,900,1600); SN.store.addCustomWallpaper('测试图', c.toDataURL('image/jpeg', 0.9)); return 1; })()`);
+  await openApp('beautify');
+  const thumb = await evaluate(`(function () { const it=document.querySelector('.wallpaper-pick__item.is-custom'); if (!it) return null; const cs=getComputedStyle(it); const r=it.getBoundingClientRect(); return { size:cs.backgroundSize, pos:cs.backgroundPosition, rep:cs.backgroundRepeat, w:Math.round(r.width), h:Math.round(r.height), ratio:Math.round((r.width/r.height)*1000)/1000, name:(it.querySelector('.wallpaper-pick__name')||{}).textContent, del:!!it.querySelector('.wallpaper-pick__del') }; })()`);
+  ok('beautify lists a custom wallpaper thumbnail', thumb, 'no .wallpaper-pick__item.is-custom');
+  equal('thumbnail scales the whole image (background-size: cover)', thumb.size, 'cover');
+  equal('thumbnail is centred on the image', thumb.pos, '50% 50%');
+  equal('thumbnail does not tile the image', thumb.rep, 'no-repeat');
+  ok('thumbnail keeps the 9:16 wallpaper ratio', Math.abs(thumb.ratio - 0.5625) <= 0.03, thumb);
+  equal('thumbnail shows the wallpaper name', thumb.name, '测试图');
+  ok('thumbnail has its delete button', thumb.del);
+  await evaluate(`SN.store.removeCustomWallpaper(SN.store.state.customWallpapers[SN.store.state.customWallpapers.length-1].id)`);
+  await closeApp();
+  say('beautify: my-wallpaper thumbnails fit the whole image (cover + centred, 9:16)');
+
   /* 第一个有图标的格子：小组件开着时是被它挤下来的第 8 格（第 3 行），关掉时就是第 0 格 —— 两种都测 */
   await evaluate(`document.querySelectorAll('.home__dot')[0].click()`);
   await wait(450);
