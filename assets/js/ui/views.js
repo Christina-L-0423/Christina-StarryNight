@@ -521,6 +521,24 @@ window.SN = window.SN || {};
         }
       });
 
+      /* ---- 状态栏电量：默认读真实设备电量（Battery Status API，见 store.js）----
+         batteryInfo 是 store 里那个 computed：{ level, charging, real, supported } */
+      const batteryInfo = store.battery;
+      const batteryReal = computed({
+        get: function () {
+          return settings.batteryReal !== false;
+        },
+        set: function (value) {
+          settings.batteryReal = !!value;
+        }
+      });
+      const batteryHint = computed(function () {
+        const info = store.battery.value;
+        if (info.real) return "已读取本机电量：" + info.level + "%" + (info.charging ? "（充电中）" : "");
+        if (!info.supported) return "这个浏览器读不到电量（接口不支持），先用下面的手动值";
+        return "已关闭，状态栏用下面的手动值";
+      });
+
       /* 桌面主屏的应用名称开关（Dock 的那个是上面的 dockLabels） */
       const homeLabels = computed({
         get: function () {
@@ -601,6 +619,9 @@ window.SN = window.SN || {};
         dockLabels: dockLabels,
         homeLabels: homeLabels,
         battery: battery,
+        batteryInfo: batteryInfo,
+        batteryReal: batteryReal,
+        batteryHint: batteryHint,
         allApps: allApps,
         appIcons: appIcons,
         iconStatus: iconStatus,
@@ -651,9 +672,16 @@ window.SN = window.SN || {};
         </div>
         <div class="row">
           <span class="row__main">
-            <span class="row__label">状态栏电量</span>
+            <span class="row__label">读取本机电量</span>
+            <span class="row__sub">{{ batteryHint }}</span>
           </span>
-          <input class="range" type="range" min="0" max="100" v-model.number="battery" />
+          <sn-switch v-model="batteryReal"></sn-switch>
+        </div>
+        <div class="row">
+          <span class="row__main">
+            <span class="row__label">状态栏电量{{ batteryInfo.real ? "（手动）" : "" }}</span>
+          </span>
+          <input class="range" type="range" min="0" max="100" v-model.number="battery" :disabled="batteryInfo.real" />
         </div>
       </div>
 

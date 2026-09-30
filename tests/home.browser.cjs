@@ -308,6 +308,85 @@ async function boot() {
   await closeApp();
   say('beautify: my-wallpaper thumbnails fit the whole image (cover + centred, 9:16)');
 
+  /* 状态栏电量：默认读真实设备电量（Battery Status API），读不到 / 关掉开关就退回手动值。
+     这个接口在 headless Edge 里可能秒回、也可能被拒绝，两种世界都得能过：
+     手动值那条路一定断言，真实值那条路只在接口可用时额外检查。 */
+  const apiPresent = await evaluate(`typeof navigator.getBattery === 'function'`);
+  const batteryNow = () => evaluate(`(function () { const b=SN.store.battery.value; const el=document.querySelector('.status-bar .battery'); const fill=el?el.querySelectorAll('svg.glyph rect')[1]:null; return { level:b.level, charging:b.charging, real:b.real, supported:b.supported, manual:SN.store.state.settings.battery, flag:SN.store.state.settings.batteryReal, glyph:!!el, hasBolt:el?!!el.querySelector('.battery__bolt'):false, chargingClass:el?el.classList.contains('is-charging'):false, fill:fill?Number(fill.getAttribute('width')):-1, fillColor:fill?fill.getAttribute('fill'):'' }; })()`);
+  const stored = key => evaluate(`(JSON.parse(localStorage.getItem('starrynight.state.v1')||'{}').settings||{}).${key}`);
+  /* 等接口回话（没有接口时立刻跳过），最多 2 秒 */
+  if (apiPresent) {
+    for (let i = 0; i < 40; i += 1) {
+      if (await evaluate('SN.store.battery.value.real || SN.store.battery.value.supported === false')) break;
+      await wait(50);
+    }
+  }
+  let batt = await batteryNow();
+  ok('status bar draws the battery glyph', batt.glyph, 'no .status-bar .battery');
+  equal('battery toggle defaults to reading the device', batt.flag, true);
+  ok('battery fill width tracks the level', Math.abs(batt.fill - Math.max(2.2, (12.8 * batt.level) / 100)) < 0.2, batt);
+  equal('charging bolt shows only while charging', batt.hasBolt, batt.charging && batt.real);
+  equal('charging class mirrors the bolt', batt.chargingClass, batt.charging && batt.real);
+  if (batt.charging && batt.real) equal('charging fill turns green', batt.fillColor, 'var(--green)');
+  else equal('idle fill keeps the status-bar colour', batt.fillColor, 'currentColor');
+  if (apiPresent && batt.real) {
+    ok('real device battery level is a percentage', batt.level >= 0 && batt.level <= 100, batt);
+    equal('a real reading also reports the API as supported', batt.supported, true);
+    say('status bar reads the real device battery (level ' + batt.level + '%, charging ' + batt.charging + ')');
+  } else {
+    say('Battery Status API unavailable here -> manual fallback path is the one under test');
+  }
+
+  /* 手动路径：关掉开关 → 状态栏改用手动值、充电闪电消失、填充宽度跟着手动值走 */
+  const realBefore = batt.real;
+  await evaluate('SN.store.state.settings.batteryReal = false');
+  await wait(150);
+  await evaluate('SN.store.state.settings.battery = 33');
+  await wait(150);
+  batt = await batteryNow();
+  equal('turning the toggle off falls back to the manual value', batt.real, false);
+  equal('status bar shows the manual percentage', batt.level, 33);
+  equal('manual mode hides the charging bolt', batt.hasBolt, false);
+  ok('status bar redraws at the manual level', Math.abs(batt.fill - 4.224) < 0.2, batt.fill);
+  equal('manual fill keeps the status-bar colour', batt.fillColor, 'currentColor');
+  /* 手动值要真的落盘（store.js 的 watch → localStorage，防抖 300ms） */
+  for (let i = 0; i < 40; i += 1) {
+    if (await stored('battery') === 33) break;
+    await wait(50);
+  }
+  equal('manual battery is persisted', await stored('battery'), 33);
+  equal('the battery toggle is persisted too', await stored('batteryReal'), false);
+  say('battery: real-device reading, manual fallback and persistence all wired');
+
+  /* 美化页的两排：开关 + 手动滑块，跟着真实电量状态走 */
+  await openApp('beautify');
+  const batteryRows = () => evaluate(`(function () { const rows=[...document.querySelectorAll('.row')]; const r=rows.filter(function(x){return x.textContent.indexOf('读取本机电量')!==-1;})[0]; const s=rows.filter(function(x){return x.textContent.indexOf('状态栏电量')!==-1;})[0]; if(!r||!s) return null; const sw=r.querySelector('.switch'); const range=s.querySelector('.range'); const sub=r.querySelector('.row__sub'); return { switchOn:sw?sw.classList.contains('is-on'):null, hint:sub?sub.textContent:'', hasSub:!!sub, label:s.querySelector('.row__label').textContent.trim(), disabled:range?range.disabled:null, value:range?Number(range.value):-1 }; })()`);
+  let rows = await batteryRows();
+  ok('beautify has the read-device-battery row + manual slider', rows, 'rows not found');
+  ok('the row carries its own explanation line', rows.hasSub, rows);
+  equal('the switch mirrors settings.batteryReal (off, as we just set it)', rows.switchOn, false);
+  ok('the row explains where the number comes from', rows.hint.length > 0, rows.hint);
+  equal('plain label while the manual value drives the bar', rows.label, '状态栏电量');
+  equal('manual slider stays usable when the device value is off', rows.disabled, false);
+  equal('slider shows the stored manual value', rows.value, 33);
+  await evaluate(`[...document.querySelectorAll('.row')].filter(function(x){return x.textContent.indexOf('读取本机电量')!==-1;})[0].querySelector('.switch').click()`);
+  await wait(300);
+  const backOn = await batteryNow();
+  equal('the beautify switch writes settings.batteryReal', backOn.flag, true);
+  equal('the switch brings the real battery back', backOn.real, realBefore);
+  rows = await batteryRows();
+  if (realBefore) {
+    equal('manual slider is greyed out while the device value drives the bar', rows.disabled, true);
+    ok('the label marks itself as the manual value', rows.label.indexOf('（手动）') !== -1, rows.label);
+    ok('the hint reports the live device level', rows.hint.indexOf('%') !== -1, rows.hint);
+  } else {
+    equal('no real reading -> slider stays usable', rows.disabled, false);
+    ok('the hint explains why the manual value is used', rows.hint.length > 0, rows.hint);
+  }
+  await evaluate('SN.store.state.settings.battery = 76');
+  await closeApp();
+  say('beautify: battery switch + manual slider follow the real device state');
+
   /* 第一个有图标的格子：小组件开着时是被它挤下来的第 8 格（第 3 行），关掉时就是第 0 格 —— 两种都测 */
   await evaluate(`document.querySelectorAll('.home__dot')[0].click()`);
   await wait(450);

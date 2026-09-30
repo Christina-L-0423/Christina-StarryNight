@@ -323,6 +323,7 @@ window.SN = window.SN || {};
         "优化：桌面编辑模式删掉底部的操作提示小字，只留「完成」按钮",
         "调整：主屏「时间 / 天气」小组件暂时下线（4 × 6 = 24 格全给图标，原来被它挤下去的图标第一次打开会自动上移压实）；想恢复只要把 config.js 里的 SN.homeWidgetEnabled 改回 true",
         "修复：美化 →「我的壁纸」里的缩略图只显示图片左上角一小块（自定义壁纸是压缩后仍有 1600px 的大图，缩略图没写 background-size），现在跟手机壁纸一样等比铺满、居中显示",
+        "新增：状态栏电量默认读真实设备电量（Battery Status API，见 store.js）——电量变化、插拔电源都会实时更新，充电时填充变绿、左边多一个小闪电；Safari 等读不到电量的浏览器自动退回手动值，「美化 → 读取本机电量」可以随时关掉",
         "新增：角色集改为竖向居中排列（头像 → 名字 → 简介依次排列）；角色编辑新增「角色简介」字段（只用于角色集展示，不会发给 AI）"
       ]
     },
@@ -479,7 +480,9 @@ window.SN = window.SN || {};
          homeWidget：小组件住在第几页 + 在图标网格上方（false）还是下方（true） */
       homeLayout: null,
       homeWidget: { page: 0, bottom: false },
-      /* 状态栏电量（目前是装饰值） */
+      /* 状态栏电量：默认读真实设备电量（Battery Status API，见 data/store.js）。
+         这里保留一份只是为了对照旧版本，真正生效的出厂值在 data/defaults.js */
+      batteryReal: true,
       battery: 76
     },
 

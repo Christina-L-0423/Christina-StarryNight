@@ -142,6 +142,19 @@
   opacity: 0.96;
 }
 
+/* 电量（sn-battery）：外框 + 填充；充电时左边多一个小闪电、填充变绿（iOS 同款）。
+   .battery 是包住闪电和电池的壳，让两者在状态栏里对齐成一个整体。 */
+.battery {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.battery__bolt {
+  flex: none;
+  fill: var(--green);
+}
+
 /* ---------- 桌面层 ---------- */
 .home-layer {
   position: absolute;

@@ -155,6 +155,56 @@ window.SN = window.SN || {};
     };
   });
 
+  /* ---------- 电量：优先读真实设备电量 ----------
+     Battery Status API：Chrome / Edge / 安卓浏览器都支持，Safari 和部分 Firefox 没有。
+     读得到就用真实值，并监听「电量变化 / 插拔电源」事件实时更新；
+     读不到、或者用户在美化里关掉「读取本机电量」→ 退回设置里的手动值（settings.battery）。
+     （这个接口只在安全上下文里可用：https / localhost / file://） */
+  const deviceBattery = ref(null); /* { level: 0~1, charging }，拿不到就是 null */
+  const batterySupported = ref(typeof navigator !== "undefined" && typeof navigator.getBattery === "function");
+
+  if (batterySupported.value) {
+    try {
+      navigator
+        .getBattery()
+        .then(function (battery) {
+          const sync = function () {
+            deviceBattery.value = { level: Number(battery.level) || 0, charging: !!battery.charging };
+          };
+          sync();
+          battery.addEventListener("levelchange", sync);
+          battery.addEventListener("chargingchange", sync);
+        })
+        .catch(function (err) {
+          /* 接口在、但读不出来（权限 / 隐私设置）→ 老老实实用手动值 */
+          batterySupported.value = false;
+          console.warn("[StarryNight] 读取设备电量失败，改用设置里的手动值：", err);
+        });
+    } catch (err) {
+      batterySupported.value = false;
+      console.warn("[StarryNight] 读取设备电量失败，改用设置里的手动值：", err);
+    }
+  }
+
+  /* 状态栏真正显示的电量：真实值（开关打开 + 读得到）→ 否则手动值 */
+  const battery = computed(function () {
+    const device = deviceBattery.value;
+    if (device && state.settings.batteryReal !== false) {
+      return {
+        level: Math.max(0, Math.min(100, Math.round(device.level * 100))),
+        charging: !!device.charging,
+        real: true,
+        supported: true
+      };
+    }
+    return {
+      level: Math.max(0, Math.min(100, Math.round(Number(state.settings.battery) || 0))),
+      charging: false,
+      real: false,
+      supported: batterySupported.value
+    };
+  });
+
   /* ---------- 壁纸与明暗主题 ---------- */
   const CUSTOM_PREFIX = "custom_";
 
@@ -432,6 +482,7 @@ window.SN = window.SN || {};
   SN.store = {
     state: state,
     clock: clock,
+    battery: battery,
     wallpaper: wallpaper,
     wallpaperStyle: wallpaperStyle,
     schemeClass: schemeClass,

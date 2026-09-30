@@ -36,28 +36,40 @@ window.SN = window.SN || {};
 
   /* ------------------------------------------------------------
      2) 电量图标（外框 + 按百分比填充）
+        充电时：填充变绿，左边多一个小闪电（数值来自 store.battery）
      ------------------------------------------------------------ */
   SN.components["sn-battery"] = {
     name: "sn-battery",
     props: {
-      level: { type: Number, default: 76 }
+      level: { type: Number, default: 76 },
+      charging: { type: Boolean, default: false }
     },
     computed: {
       fillWidth: function () {
         const w = (12.8 * Math.max(0, Math.min(100, this.level))) / 100;
         return Math.max(2.2, w);
+      },
+      fillColor: function () {
+        /* 充电中的填充是绿色的（iOS 同款），普通状态跟着状态栏文字颜色走 */
+        return this.charging ? "var(--green)" : "currentColor";
       }
     },
     template:
+      '<span class="battery" :class="{ \'is-charging\': charging }">' +
+      '<svg class="battery__bolt" v-if="charging" width="9" height="12" viewBox="0 0 9 12" aria-hidden="true">' +
+      '<path d="M5.7 0 0 6.9h2.9L2.5 12 8 5.2H5.2L5.7 0Z"/>' +
+      "</svg>" +
       '<svg class="glyph" width="26" height="14" viewBox="0 0 26 14" aria-hidden="true">' +
       '<rect x="1" y="1.6" width="21" height="10.8" rx="3.4" fill="none" stroke="currentColor" stroke-width="1.1" opacity=".45"/>' +
-      '<rect x="3" y="3.6" :width="fillWidth" height="6.8" rx="2" fill="currentColor"/>' +
+      '<rect x="3" y="3.6" :width="fillWidth" height="6.8" rx="2" :fill="fillColor"/>' +
       '<path d="M23.6 5.1v3.8c1-.3 1.6-1 1.6-1.9s-.6-1.6-1.6-1.9Z" fill="currentColor" opacity=".45"/>' +
-      "</svg>"
+      "</svg>" +
+      "</span>"
   };
 
   /* ------------------------------------------------------------
      3) 顶部状态栏：时间 + 信号 + WiFi + 电量
+        电量来自 store.battery：默认是真实设备电量（Battery Status API）
      ------------------------------------------------------------ */
   SN.components["sn-status-bar"] = {
     name: "sn-status-bar",
@@ -65,7 +77,7 @@ window.SN = window.SN || {};
       const store = SN.store;
       return {
         clock: store.clock,
-        settings: store.state.settings
+        battery: store.battery
       };
     },
     template:
@@ -74,7 +86,7 @@ window.SN = window.SN || {};
       '<div class="status-bar__right">' +
       '<sn-glyph name="signal" :size="17"></sn-glyph>' +
       '<sn-glyph name="wifi" :size="17"></sn-glyph>' +
-      '<sn-battery :level="settings.battery"></sn-battery>' +
+      '<sn-battery :level="battery.level" :charging="battery.charging"></sn-battery>' +
       "</div>" +
       "</div>"
   };
