@@ -672,6 +672,48 @@ window.SN = window.SN || {};
         }
       });
 
+      /* ---- 状态栏电量：默认读本机真实电量，读不到就用下面的手动值 ----
+         batteryInfo 是 store 里那个 computed：
+         { level, charging, real, supported, forced, issue } */
+      const batteryInfo = store.battery;
+      const batteryReal = computed({
+        get: function () {
+          return settings.batteryReal !== false;
+        },
+        set: function (value) {
+          settings.batteryReal = !!value;
+        }
+      });
+      /* 拉条直接改手动值；没设过时显示的是兜底值（config.js 的 SN.batteryFallback） */
+      const battery = computed({
+        get: function () {
+          return store.battery.value.level;
+        },
+        set: function (value) {
+          settings.battery = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+        }
+      });
+      const batteryHint = computed(function () {
+        const info = store.battery.value;
+        if (info.real) {
+          return "已读到本机电量：" + info.level + "%" + (info.charging ? "（充电中）" : "") + "，状态栏跟着它实时更新";
+        }
+        if (info.forced) return "已关闭，状态栏用下面的手动值";
+        if (info.issue === "insecure") {
+          return "读不到电量：现在不是「安全上下文」（用 http://192.168.x.x 这种局域网地址打开时，Chrome / Edge 会关掉电量接口）。换成 https / localhost / file:// 打开就能读到，现在先用下面的手动值";
+        }
+        if (info.issue === "no-api") {
+          return "这个浏览器没有电量接口（Safari、部分 Firefox 都没有），状态栏用下面的手动值";
+        }
+        if (info.issue === "denied") {
+          return "读取本机电量被浏览器拒绝（权限 / 隐私设置），状态栏用下面的手动值";
+        }
+        if (info.issue === "unreadable") {
+          return "接口在，但本机没给出电量数值，状态栏用下面的手动值";
+        }
+        return "状态栏用下面的手动值";
+      });
+
       /* ---- 自定义应用图标：给任意应用换成自己的图片 ---- */
       /* 只有桌面和 Dock 上的应用才出现在「自定义应用图标」列表里
          （隐藏页如「角色编辑」不算应用，不列出来） */
@@ -741,6 +783,10 @@ window.SN = window.SN || {};
         removeImage: removeImage,
         dockLabels: dockLabels,
         homeLabels: homeLabels,
+        battery: battery,
+        batteryInfo: batteryInfo,
+        batteryReal: batteryReal,
+        batteryHint: batteryHint,
         allApps: allApps,
         appIcons: appIcons,
         iconStatus: iconStatus,
@@ -788,6 +834,23 @@ window.SN = window.SN || {};
             <span class="row__label">应用名称显示</span>
           </span>
           <sn-switch v-model="homeLabels"></sn-switch>
+        </div>
+      </div>
+
+      <p class="section-title">状态栏电量</p>
+      <div class="list">
+        <div class="row">
+          <span class="row__main">
+            <span class="row__label">读取本机电量</span>
+            <span class="row__sub row__sub--wrap">{{ batteryHint }}</span>
+          </span>
+          <sn-switch v-model="batteryReal"></sn-switch>
+        </div>
+        <div class="row">
+          <span class="row__main">
+            <span class="row__label">状态栏电量{{ batteryInfo.real ? "（本机）" : "（手动）" }}</span>
+          </span>
+          <input class="range" type="range" min="0" max="100" v-model.number="battery" :disabled="batteryInfo.real" />
         </div>
       </div>
 

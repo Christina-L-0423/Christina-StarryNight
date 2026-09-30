@@ -815,6 +815,12 @@
   background: #fff;
 }
 
+/* 被读到的真实电量接管时（「读取本机电量」开着且读得到），手动值那条拉条就没用了 */
+.range:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 /* 聊天设置里的拉条：占满一整行，右边留给数字 */
 .range--wide {
   flex: 1;

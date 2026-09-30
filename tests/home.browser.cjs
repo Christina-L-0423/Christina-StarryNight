@@ -448,10 +448,14 @@ async function boot() {
   await closeApp();
   say('beautify: my-wallpaper thumbnails fit the whole image (cover + centred, 9:16)');
 
-  /* 状态栏电量：读本机真实电量（Battery Status API，见 store.js），界面上没有手动值。
-     这个接口在 headless Edge 里可能秒回、也可能被拒绝，两种世界都得能过：
-     有接口那条路按设备实际电量断言，读不到（含被拒绝）那条路断言固定兜底值。 */
+  /* 状态栏电量：优先读本机真实电量（Battery Status API，见 store.js），读不到才用
+     「美化 → 状态栏电量」里的手动值。headless Edge 里这个接口可能秒回、也可能被拒绝，
+     两种世界都得能过：读得到就按设备实际电量断言，读不到就按手动值断言。
+     下面把两条路都演一遍（关开关 / 拖拉条 / 再打开开关）。 */
   const apiPresent = await evaluate(`typeof navigator.getBattery === 'function'`);
+  /* 读不到本机电量时状态栏该显示什么：settings.battery 设过就用它，
+     没设过用 config.js 的 SN.batteryFallback（和 store.js 里的规则一致） */
+  const manualLevel = () => evaluate(`(function () { const s = SN.store.state.settings; return (s.battery === null || s.battery === undefined || s.battery === '') ? SN.batteryFallback : Math.round(Number(s.battery)); })()`);
   const batteryNow = () => evaluate(`(function () { const b=SN.store.battery.value; const el=document.querySelector('.status-bar .battery'); const fill=el?el.querySelectorAll('svg.glyph rect')[1]:null; return { level:b.level, charging:b.charging, real:b.real, glyph:!!el, hasBolt:el?!!el.querySelector('.battery__bolt'):false, chargingClass:el?el.classList.contains('is-charging'):false, fill:fill?Number(fill.getAttribute('width')):-1, fillColor:fill?fill.getAttribute('fill'):'' }; })()`);
   const stored = key => evaluate(`(JSON.parse(localStorage.getItem('starrynight.state.v1')||'{}').settings||{}).${key}`);
   /* 等接口回话（接口不可用就没有这一步），最多 2 秒 */
@@ -476,22 +480,83 @@ async function boot() {
     equal('the charging flag is the device one', batt.charging, device.charging);
     say('status bar reads the real device battery (level ' + batt.level + '%, charging ' + batt.charging + ')');
   } else {
-    equal('no usable device reading -> the fixed fallback level', batt.level, fallback);
-    say('Battery Status API unusable here -> the bar falls back to ' + fallback + '%');
+    equal('no usable device reading -> the manual level', batt.level, await manualLevel());
+    equal('the manual level is not marked as a real reading', batt.real, false);
+    say('Battery Status API unusable here -> the bar shows the manual level');
   }
 
-  /* 电量设置整个从 settings 里下线：没有手动值、也没有开关，状态栏只认设备电量 + 兜底值 */
-  equal('settings no longer stores a manual battery', await stored('battery'), undefined);
-  equal('settings no longer stores the battery toggle', await stored('batteryReal'), undefined);
-  say('battery: real-device level only, no manual value in settings');
-
-  /* 美化页也不该再有电量相关的行（以前是「读取本机电量」开关 + 「状态栏电量」滑块） */
+  /* 「美化 → 状态栏电量」：一条「读取本机电量」开关 + 一条手动拉条。
+     读不到本机电量的浏览器（Safari / 部分 Firefox / 用局域网 http 地址打开）里，
+     手动值就是状态栏唯一能用的来源，所以两条都必须真的管用。 */
   await openApp('beautify');
-  const batteryUi = await evaluate(`(function () { const screen=document.querySelector('.app-screen'); const rows=[...screen.querySelectorAll('.row')].filter(function(x){return x.textContent.indexOf('电量')!==-1;}); return { mentions:rows.length, text:rows.map(function(x){return x.textContent.trim();}).join('|'), ranges:screen.querySelectorAll('input[type=range]').length }; })()`);
-  equal('beautify has no battery row left', batteryUi.mentions, 0);
-  equal('beautify has no battery slider left', batteryUi.ranges, 0);
+  const batteryUi = () => evaluate(`(function () {
+    const screen = document.querySelector('.app-screen');
+    const rows = [...screen.querySelectorAll('.row')];
+    const readRow = rows.filter(function (r) { return r.textContent.indexOf('读取本机电量') !== -1; })[0] || null;
+    const sliderRow = rows.filter(function (r) { return !!r.querySelector('input.range'); })[0] || null;
+    const range = sliderRow ? sliderRow.querySelector('input.range') : null;
+    const sw = readRow ? readRow.querySelector('.switch') : null;
+    return {
+      batteryRows: rows.filter(function (r) { return r.textContent.indexOf('电量') !== -1; }).length,
+      hasSwitch: !!sw,
+      switchOn: sw ? sw.classList.contains('is-on') : null,
+      hint: readRow ? readRow.querySelector('.row__sub').textContent.trim() : '',
+      hasRange: !!range,
+      value: range ? Number(range.value) : null,
+      disabled: range ? !!range.disabled : null,
+      label: sliderRow ? sliderRow.querySelector('.row__label').textContent.trim() : ''
+    };
+  })()`);
+  const tapBatterySwitch = () => evaluate(`(function () { const rows = [...document.querySelectorAll('.app-screen .row')]; const row = rows.filter(function (r) { return r.textContent.indexOf('读取本机电量') !== -1; })[0]; row.querySelector('.switch').click(); })()`);
+  let ui = await batteryUi();
+  ok('beautify lists the battery rows again', ui.batteryRows >= 1, ui);
+  ok('the battery switch is there', ui.hasSwitch, ui);
+  ok('the manual battery slider is there', ui.hasRange, ui);
+  equal('the switch is on by default (read the device level)', ui.switchOn, true);
+  ok('the device reading is marked as real in the store', await evaluate(`SN.store.battery.value.real === ${apiPresent && batt.real}`), ui.hint);
+  if (apiPresent && batt.real) {
+    equal('the slider is locked while the device level drives the bar', ui.disabled, true);
+    ok('the hint shows the device reading', ui.hint.indexOf('已读到本机电量') !== -1, ui.hint);
+  } else {
+    equal('the slider stays usable when the device level cannot be read', ui.disabled, false);
+    ok('the hint says why the level is not readable', ui.hint.length > 0 && ui.hint.indexOf('已读到本机电量') === -1, ui.hint);
+  }
+
+  /* 关掉「读取本机电量」→ 状态栏立刻改用手动值（没有小闪电），并写进设置 */
+  await tapBatterySwitch();
+  await wait(450);
+  const manualNow = await manualLevel();
+  const off = await batteryNow();
+  equal('switching off hands the bar over to the manual level', off.level, manualNow);
+  equal('switching off drops the charging bolt', off.hasBolt, false);
+  equal('the switch state is saved', await stored('batteryReal'), false);
+  ui = await batteryUi();
+  equal('the slider is enabled now', ui.disabled, false);
+  equal('the slider shows the level in use', ui.value, manualNow);
+  ok('the hint says the switch is off', ui.hint.indexOf('关闭') !== -1, ui.hint);
+  equal('the fill keeps the status-bar colour', off.fillColor, 'currentColor');
+  say('beautify: the manual level takes over once the device reading is switched off');
+
+  /* 拖那条拉条 → 状态栏跟着变，值存进 settings.battery（读不到电量时全靠它） */
+  await evaluate(`(function () { const r = document.querySelector('.app-screen input.range'); r.value = '42'; r.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  await wait(450);
+  const slideBatt = await batteryNow();
+  equal('dragging the slider moves the bar', slideBatt.level, 42);
+  ok('the fill width follows the slider', Math.abs(slideBatt.fill - Math.max(2.2, (12.8 * 42) / 100)) < 0.2, slideBatt);
+  equal('the manual level is saved', await stored('battery'), 42);
+  ui = await batteryUi();
+  ok('the slider label says the level is manual', ui.label.indexOf('手动') !== -1, ui.label);
+  say('beautify: the manual battery slider drives the bar and is saved (' + slideBatt.level + '%)');
+
+  /* 再打开开关：读得到就回到本机读数，读不到就继续用手动值 */
+  await tapBatterySwitch();
+  await wait(450);
+  const back = await batteryNow();
+  equal('the switch state is saved again', await stored('batteryReal'), true);
+  if (apiPresent) equal('turning it back on returns the device reading', back.real, true);
+  else equal('still no device reading -> the manual level stays', back.level, 42);
   await closeApp();
-  say('beautify: the battery rows are gone (the bar follows the device only)');
+  say('battery: the device level wins when it is readable, the manual level is the fallback');
 
   /* 第一个有图标的格子：小组件开着时是被它挤下来的第 8 格（第 3 行），关掉时就是第 0 格 —— 两种都测 */
   await evaluate(`document.querySelectorAll('.home__dot')[0].click()`);
@@ -664,8 +729,8 @@ async function boot() {
   equal('leaving the app does not fall into edit mode', await evaluate(`document.querySelectorAll('.home__pager.is-editing').length`), 0);
   ok('home grid is back', await evaluate(`!!document.querySelector('.home__cell')`));
   /* 最后再演一次「浏览器根本没有 Battery Status API」的世界（Safari / 部分 Firefox）：
-     在页面脚本跑之前把 navigator.getBattery 摘掉，然后刷新——状态栏必须退回 config.js 的兜底值，
-     不报错、不空白。这一步放在最后，刷新页面不会影响前面的断言。 */
+     在页面脚本跑之前把 navigator.getBattery 摘掉，然后刷新——状态栏必须退回设置里
+     保存的手动值（上面刚拖到 42），不报错、不空白。这一步放在最后，刷新页面不会影响前面的断言。 */
   await send('Page.enable');
   const stripper = await send('Page.addScriptToEvaluateOnNewDocument', {
     source: `try { Object.defineProperty(navigator, 'getBattery', { value: undefined, configurable: true }); } catch (e) {}`
@@ -675,13 +740,20 @@ async function boot() {
   await wait(250);
   const noApi = await batteryNow();
   equal('no API: the browser really lost getBattery', await evaluate(`typeof navigator.getBattery`), 'undefined');
-  equal('no API: the fixed fallback level drives the bar', noApi.level, await evaluate('SN.batteryFallback'));
+  equal('no API: the saved manual level drives the bar', noApi.level, await manualLevel());
+  equal('no API: the manual level survived the reload', noApi.level, 42);
   equal('no API: the value is not marked as a real reading', noApi.real, false);
   equal('no API: no charging bolt either', noApi.hasBolt, false);
   ok('no API: the status bar still draws a battery glyph', noApi.glyph);
   ok('no API: the fill width still matches the level', Math.abs(noApi.fill - Math.max(2.2, (12.8 * noApi.level) / 100)) < 0.2, noApi);
+  /* 这个世界的「美化」也得写清为什么读不到，而且手动拉条仍然能用 */
+  await openApp('beautify');
+  const noApiUi = await batteryUi();
+  equal('no API: the manual slider is still usable', noApiUi.disabled, false);
+  ok('no API: the hint explains why the level is not readable', noApiUi.hint.length > 0 && noApiUi.hint.indexOf('已读到本机电量') === -1, noApiUi.hint);
+  await closeApp();
   await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: stripper.identifier });
-  say('battery: without the Battery Status API the bar falls back to ' + noApi.level + '%');
+  say('battery: without the Battery Status API the bar falls back to the saved manual level (' + noApi.level + '%)');
 
   same('no console errors during the whole run', errors, []);
   say('open/close app does not fall into edit mode');

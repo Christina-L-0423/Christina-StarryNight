@@ -160,49 +160,92 @@ window.SN = window.SN || {};
     };
   });
 
-  /* ---------- 电量：状态栏读本机真实电量 ----------
-     Battery Status API：Chrome / Edge / 安卓浏览器都支持，Safari 和部分 Firefox 没有。
-     读得到就用真实值，并监听「电量变化 / 插拔电源」事件实时更新；
-     读不到（浏览器没有这个接口，或者权限被拒）就用固定的兜底值（config.js 的 SN.batteryFallback），
-     这样状态栏在任何浏览器里都不会空白，界面上也不用自己填数字。
-     （这个接口只在安全上下文里可用：https / localhost / file://） */
-  const deviceBattery = ref(null); /* { level: 0~1, charging }，拿不到就是 null */
+  /* ---------- 电量：默认读本机真实电量，读不到才用手动值 ----------
+     Battery Status API：Chrome / Edge / 安卓浏览器都有；Safari 和部分 Firefox 完全没有。
+     接口只在「安全上下文」里给：https / localhost / file:// ——
+     用局域网地址（http://192.168.x.x）打开时 Chromium 会直接把它收走（界面就只剩手动值）。
+     读得到 → 用真实值，并监听「电量变化 / 插拔电源」事件实时更新；
+     读不到（没有接口 / 不是安全上下文 / 被拒绝 / 给的数值不合法），
+     或者用户在「美化 → 状态栏电量」里关掉「读取本机电量」
+     → 退回手动值（settings.battery，没设过就用 config.js 的 SN.batteryFallback）。 */
+  const deviceBattery = ref(null); /* { level: 0~1, charging }，读不到就是 null */
 
-  /* 读不到真实电量时显示的固定值（0~100，改 config.js 的 SN.batteryFallback） */
-  const FALLBACK_BATTERY = Math.max(0, Math.min(100, Math.round(Number(SN.batteryFallback)) || 0));
+  /* 读不到的原因，给「美化 → 状态栏电量」写提示用：
+     "" 读到了 / "insecure" 不是安全上下文 / "no-api" 没有这个接口 /
+     "denied" 被拒绝 / "unreadable" 接口在但数值不合法 */
+  const batteryIssue = ref("");
 
-  if (typeof navigator !== "undefined" && typeof navigator.getBattery === "function") {
+  const isSecure = typeof window !== "undefined" && window.isSecureContext !== false;
+
+  if (typeof navigator === "undefined" || typeof navigator.getBattery !== "function") {
+    batteryIssue.value = isSecure ? "no-api" : "insecure";
+  } else {
     try {
       navigator
         .getBattery()
         .then(function (battery) {
+          /* 有的浏览器「接口在、但给不出电量」：level 会是 NaN / 越界值。
+             这种数值绝不能当 0% 用（否则状态栏会画成空电池），一律当成读不到 */
           const sync = function () {
-            deviceBattery.value = { level: Number(battery.level) || 0, charging: !!battery.charging };
+            const level = Number(battery.level);
+            if (isFinite(level) && level >= 0 && level <= 1) {
+              deviceBattery.value = { level: level, charging: !!battery.charging };
+              batteryIssue.value = "";
+            } else {
+              deviceBattery.value = null;
+              batteryIssue.value = "unreadable";
+            }
           };
           sync();
           battery.addEventListener("levelchange", sync);
           battery.addEventListener("chargingchange", sync);
         })
         .catch(function (err) {
-          /* 接口在、但读不出来（权限 / 隐私设置）→ 用兜底值 */
-          console.warn("[StarryNight] 读取本机电量失败，状态栏改用兜底值：", err);
+          /* 接口在、但读不出来（权限 / 隐私设置）→ 用手动值 */
+          deviceBattery.value = null;
+          batteryIssue.value = "denied";
+          console.warn("[StarryNight] 读取本机电量失败，状态栏改用手动值：", err);
         });
     } catch (err) {
-      console.warn("[StarryNight] 读取本机电量失败，状态栏改用兜底值：", err);
+      deviceBattery.value = null;
+      batteryIssue.value = "denied";
+      console.warn("[StarryNight] 读取本机电量失败，状态栏改用手动值：", err);
     }
   }
 
-  /* 状态栏真正显示的电量：读得到真实值就用真实值，否则用兜底值 */
+  /* 手动值：settings.battery 没设过（null）就用 config.js 的 SN.batteryFallback */
+  const FALLBACK_BATTERY = Math.max(0, Math.min(100, Math.round(Number(SN.batteryFallback)) || 0));
+
+  function manualBatteryLevel() {
+    const raw = state.settings.battery;
+    if (raw === null || raw === undefined || raw === "") return FALLBACK_BATTERY;
+    const num = Number(raw);
+    if (!isFinite(num)) return FALLBACK_BATTERY;
+    return Math.max(0, Math.min(100, Math.round(num)));
+  }
+
+  /* 状态栏真正显示的电量：「读取本机电量」开着 + 读到了真实值 → 真实值；否则手动值 */
   const battery = computed(function () {
     const device = deviceBattery.value;
-    if (device) {
+    if (device && state.settings.batteryReal !== false) {
       return {
         level: Math.max(0, Math.min(100, Math.round(device.level * 100))),
         charging: !!device.charging,
-        real: true
+        real: true,
+        /* 本机接口是不是可用（美化页用它区分「浏览器没给」和「自己关掉了」） */
+        supported: true,
+        forced: false,
+        issue: ""
       };
     }
-    return { level: FALLBACK_BATTERY, charging: false, real: false };
+    return {
+      level: manualBatteryLevel(),
+      charging: false,
+      real: false,
+      supported: batteryIssue.value === "",
+      forced: state.settings.batteryReal === false,
+      issue: batteryIssue.value
+    };
   });
 
   /* ---------- 壁纸与明暗主题 ---------- */

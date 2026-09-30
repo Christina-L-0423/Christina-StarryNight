@@ -208,8 +208,13 @@ window.SN = window.SN || {};
     homeLabels: true,
     /* 自定义应用图标：app id → 图片 dataURL（在「美化 → 自定义应用图标」里设置） */
     appIcons: {},
-    /* 状态栏电量：直接读本机真实电量（Battery Status API，见 store.js），
-       读不到时用 config.js 的 SN.batteryFallback；这里不再存电量设置 */
+    /* 状态栏电量（在「美化 → 状态栏电量」里调）：
+       batteryReal = true 时优先读本机真实电量（Battery Status API，见 store.js）；
+       读不到（Safari / 部分 Firefox 没有这个接口，或者用 http 的局域网地址打开）
+       或关掉这个开关 → 用下面的手动值。
+       battery = null 表示「没手动设过」→ 用 config.js 的 SN.batteryFallback */
+    batteryReal: true,
+    battery: null
   };
 
   SN.defaults.user = {
